@@ -1,0 +1,9 @@
+[package]
+name = "fish-prompt"
+version = "0.1.0"
+authors = ["Gregory Meyer <gregjm@umich.edu>"]
+edition = "2018"
+
+[dependencies]
+dirs = "^1.0.5"
+git2 = "^0.8.0"
