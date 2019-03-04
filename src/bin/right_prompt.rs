@@ -4,7 +4,7 @@ extern crate git2;
 use std::env;
 
 use colored::Colorize;
-use git2::{Branch, Repository};
+use git2::{Branch, DiffOptions, Repository};
 
 fn main() {
     println!("{}", make_prompt());
@@ -39,11 +39,17 @@ fn repo_head() -> Option<String> {
         Err(_) => return None,
     };
 
+    let mut options = DiffOptions::new();
+    options.include_untracked(true)
+        .include_unmodified(false)
+        .ignore_filemode(false)
+        .ignore_submodules(false);
+
     let head = repo.head().unwrap();
     let has_changes = head.peel_to_commit()
         .map(|c| c.tree_id())
         .and_then(|i| repo.find_tree(i))
-        .and_then(|t| repo.diff_tree_to_workdir(Some(&t), None))
+        .and_then(|t| repo.diff_tree_to_workdir(Some(&t), Some(&mut options)))
         .map(|d| d.deltas().next().is_some())
         .unwrap_or(false);
 
