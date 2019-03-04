@@ -165,12 +165,6 @@ impl DiffOptions {
         self
     }
 
-    pub fn include_unmodified(mut self) -> DiffOptions {
-        self.0.flags |= GIT_DIFF_INCLUDE_UNMODIFIED as u32;
-
-        self
-    }
-
     pub fn skip_binary_check(mut self) -> DiffOptions {
         self.0.flags |= GIT_DIFF_SKIP_BINARY_CHECK as u32;
 
@@ -179,12 +173,6 @@ impl DiffOptions {
 
     pub fn enable_fast_untracked_dirs(mut self) -> DiffOptions {
         self.0.flags |= GIT_DIFF_ENABLE_FAST_UNTRACKED_DIRS as u32;
-
-        self
-    }
-
-    pub fn update_index(mut self) -> DiffOptions {
-        self.0.flags |= GIT_DIFF_UPDATE_INDEX as u32;
 
         self
     }

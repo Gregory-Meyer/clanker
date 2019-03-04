@@ -57,10 +57,8 @@ fn repo_head() -> Option<String> {
 
     let options = DiffOptions::new()
         .include_untracked()
-        .include_unmodified()
         .skip_binary_check()
         .enable_fast_untracked_dirs()
-        .update_index()
         .set_notify_cb(notify_cb)
         .set_payload(&mut has_diff as *mut _ as *mut c_void);
 
