@@ -1,10 +1,16 @@
 extern crate colored;
-extern crate git2;
+extern crate libc;
+extern crate libgit2_sys;
+
+mod git;
+
+use git::{DiffOptions, Repository};
 
 use std::env;
 
 use colored::Colorize;
-use git2::{Branch, DiffOptions, Repository};
+use libc::{c_char, c_int, c_void};
+use libgit2_sys::{git_diff, git_diff_delta};
 
 fn main() {
     println!("{}", make_prompt());
@@ -34,49 +40,59 @@ fn make_prompt() -> String {
 }
 
 fn repo_head() -> Option<String> {
-    let repo = match Repository::open_from_env() {
+    let mut repo = match Repository::open_from_env() {
         Ok(r) => r,
         Err(_) => return None,
     };
 
-    let mut options = DiffOptions::new();
-    options.include_untracked(true)
-        .include_unmodified(false)
-        .ignore_filemode(false)
-        .ignore_submodules(false);
+    let head = match repo.head() {
+        Ok(h) => h,
+        Err(_) => return None,
+    };
 
-    let head = repo.head().unwrap();
-    let has_changes = head.peel_to_commit()
-        .map(|c| c.tree_id())
-        .and_then(|i| repo.find_tree(i))
-        .and_then(|t| repo.diff_tree_to_workdir(Some(&t), Some(&mut options)))
-        .map(|d| d.deltas().next().is_some())
-        .unwrap_or(false);
+    let head_commit = head.peel_to_commit().expect("couldn't peel HEAD to commit");
+    let mut head_tree = head_commit.tree().expect("couldn't get tree from HEAD commit");
 
-    if head.is_branch() {
-        let branch_name = Branch::wrap(head)
-            .name()
-            .unwrap()
-            .map(|n| n.to_string())
-            .unwrap_or_else(|| "?".to_string());
+    let mut has_diff = false;
 
-        if has_changes {
-            Some(format!("{} *", branch_name))
+    let options = DiffOptions::new()
+        .include_untracked()
+        .include_unmodified()
+        .skip_binary_check()
+        .enable_fast_untracked_dirs()
+        .update_index()
+        .set_notify_cb(notify_cb)
+        .set_payload(&mut has_diff as *mut _ as *mut c_void);
+
+    match repo.diff_tree_to_workdir_with_index(Some(&mut head_tree), Some(&options)) {
+        _ => (),
+    };
+
+    if let Ok(name) = head.branch_name().map(|n| n.to_string_lossy()) {
+        if has_diff {
+            Some(format!("{} *", name))
         } else {
-            Some(branch_name)
+            Some(name.into_owned())
         }
     } else {
-        let mut hash = head.peel_to_commit()
-            .unwrap()
-            .id()
-            .to_string();
+        let mut oid = head_commit.id().to_string();
+        oid.truncate(7);
 
-        hash.truncate(7);
-
-        if has_changes {
-            Some(format!("{} *", hash))
+        if has_diff {
+            Some(format!("{} *", oid))
         } else {
-            Some(hash)
+            Some(oid)
         }
     }
+}
+
+extern "C" fn notify_cb(
+    _: *const git_diff,
+    _: *const git_diff_delta,
+    _: *const c_char,
+    has_changes: *mut c_void,
+) -> c_int {
+    unsafe { *(has_changes as *mut bool) = true };
+
+    -1 // stop diff iteration
 }
