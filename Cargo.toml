@@ -1,5 +1,5 @@
 [package]
-name = "fish-prompt"
+name = "clanker"
 version = "0.1.0"
 authors = ["Gregory Meyer <gregjm@umich.edu>"]
 edition = "2018"

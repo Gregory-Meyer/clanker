@@ -26,31 +26,33 @@ fn cwd() -> String {
 }
 
 fn compress(path: String) -> String {
-    let separator = if cfg!(windows) {
-        "\\"
-    } else {
-        "/"
-    };
-
-    let components: Vec<&str> = path.split(separator).collect();
+    let components: Vec<&str> = path.split('/').collect();
     let (last, rest) = components.split_last().unwrap();
 
     if rest.is_empty() {
         return last.to_string();
     }
 
-    let parts: Vec<&str> = rest.iter().map(|s| {
-        let mut graphemes = s.grapheme_indices(true);
-        match graphemes.next() {
-            Some((_, g)) => if g == "." {
-                graphemes.next().map(|(j, h)| &s[..j + h.len()]).unwrap_or(g)
-            } else {
-                g
+    let parts: Vec<&str> = rest
+        .iter()
+        .map(|s| {
+            let mut graphemes = s.grapheme_indices(true);
+            match graphemes.next() {
+                Some((_, g)) => {
+                    if g == "." {
+                        graphemes
+                            .next()
+                            .map(|(j, h)| &s[..j + h.len()])
+                            .unwrap_or(g)
+                    } else {
+                        g
+                    }
+                }
+                None => "",
             }
-            None => "",
-        }
-    }).chain(iter::once(*last))
+        })
+        .chain(iter::once(*last))
         .collect();
 
-    parts.join(separator)
+    parts.join("/")
 }

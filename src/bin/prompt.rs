@@ -10,15 +10,25 @@ use colored::Colorize;
 use nix::unistd::{self, Uid};
 
 fn main() {
-    println!("{}", make_prompt());
-}
-
-fn make_prompt() -> String {
     let cwd = compress::compressed_cwd();
 
-    if unistd::geteuid() == Uid::from_raw(0) {
-        format!("{}@{} {}# ", whoami::username(), whoami::hostname(), cwd.red())
+    if is_current_user_priviliged() {
+        print!(
+            "{}@{} {}# ",
+            whoami::username(),
+            whoami::hostname(),
+            cwd.red()
+        )
     } else {
-        format!("{}@{} {}> ", whoami::username(), whoami::hostname(), cwd.green())
+        print!(
+            "{}@{} {}> ",
+            whoami::username(),
+            whoami::hostname(),
+            cwd.green()
+        )
     }
+}
+
+fn is_current_user_priviliged() -> bool {
+    unistd::geteuid() == Uid::from_raw(0)
 }
