@@ -39,11 +39,13 @@ fn repo_head() -> Option<String> {
         Err(_) => return None,
     };
 
-    let has_changes = repo.diff_tree_to_workdir_with_index(None, None)
+    let head = repo.head().unwrap();
+    let has_changes = head.peel_to_commit()
+        .map(|c| c.tree_id())
+        .and_then(|i| repo.find_tree(i))
+        .and_then(|t| repo.diff_tree_to_workdir(Some(&t), None))
         .map(|d| d.deltas().next().is_some())
         .unwrap_or(false);
-
-    let head = repo.head().unwrap();
 
     if head.is_branch() {
         let branch_name = Branch::wrap(head)
