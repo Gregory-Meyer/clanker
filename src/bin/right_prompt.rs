@@ -52,7 +52,7 @@ fn repo_head() -> Option<String> {
             .name()
             .unwrap()
             .map(|n| n.to_string())
-            .unwrap_or("?".to_string());
+            .unwrap_or_else(|| "?".to_string());
 
         if has_changes {
             Some(format!("{} *", branch_name))
