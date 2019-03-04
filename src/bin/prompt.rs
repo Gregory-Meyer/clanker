@@ -58,8 +58,13 @@ fn compress(path: String) -> String {
     }
 
     let parts: Vec<&str> = rest.iter().map(|s| {
-        match s.graphemes(true).next() {
-            Some(g) => g,
+        let mut graphemes = s.grapheme_indices(true);
+        match graphemes.next() {
+            Some((_, g)) => if g == "." {
+                graphemes.next().map(|(j, h)| &s[..j + h.len()]).unwrap_or(g)
+            } else {
+                g
+            }
             None => "",
         }
     }).chain(iter::once(*last))
