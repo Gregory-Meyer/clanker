@@ -23,7 +23,7 @@
 
 use std::{
     env,
-    ffi::{OsStr, OsString},
+    ffi::{CString, OsStr, OsString},
     iter,
     os::unix::ffi::OsStrExt,
     path::{Component, Path, PathBuf},
@@ -37,7 +37,7 @@ pub fn compressed_cwd() -> String {
 }
 
 fn cwd() -> String {
-    let mut cwd = match env::current_dir() {
+    let cwd = match env::current_dir() {
         Ok(p) => p,
         Err(_) => return "?".to_string(),
     };
@@ -48,10 +48,12 @@ fn cwd() -> String {
         }
 
         if let Ok(path) = cwd.strip_prefix(&home) {
-            cwd = PathBuf::from("~").join(path);
-        } else if let Some(p) = compact_user_prefix(&cwd) {
-            return p;
+            return format!("{}", PathBuf::from("~").join(path).display());
         }
+    }
+
+    if let Some(p) = compact_user_prefix(&cwd) {
+        return p;
     }
 
     format!("{}", cwd.display())
@@ -133,7 +135,7 @@ fn home_dir_prefix() -> PathBuf {
 }
 
 fn is_user(maybe_user: &OsStr) -> bool {
-    let maybe_user_ptr = maybe_user.as_bytes().as_ptr() as *const c_char;
+    let maybe_user_nullterm = CString::new(maybe_user.as_bytes()).unwrap();
 
-    !unsafe { libc::getpwnam(maybe_user_ptr) }.is_null()
+    !unsafe { libc::getpwnam(maybe_user_nullterm.as_ptr()) }.is_null()
 }
