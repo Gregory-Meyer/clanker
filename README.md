@@ -1,5 +1,7 @@
 # clanker
 
+[![Crates.io](https://img.shields.io/crates/v/clanker.svg)](https://crates.io/crates/clanker)
+
 Clanker is a minimalistic set of command prompts for fish.
 
 ## Usage
