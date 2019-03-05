@@ -5,6 +5,8 @@ authors = ["Gregory Meyer <gregjm@umich.edu>"]
 edition = "2018"
 description = "Minimalistic command prompt for fish."
 license = "MIT"
+readme = "README.md"
+repository = "https://github.com/Gregory-Meyer/clanker"
 
 [dependencies]
 colored = "^1.7.0"
