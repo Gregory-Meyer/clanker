@@ -23,6 +23,7 @@
 
 extern crate colored;
 extern crate dirs;
+extern crate libc;
 extern crate nix;
 extern crate unicode_segmentation;
 extern crate whoami;

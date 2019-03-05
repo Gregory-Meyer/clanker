@@ -21,8 +21,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 
-use std::{env, iter, path::PathBuf};
+use std::{
+    env,
+    ffi::{OsStr, OsString},
+    iter,
+    os::unix::ffi::OsStrExt,
+    path::{Component, Path, PathBuf},
+};
 
+use libc::c_char;
 use unicode_segmentation::UnicodeSegmentation;
 
 pub fn compressed_cwd() -> String {
@@ -40,8 +47,10 @@ fn cwd() -> String {
             return "~".to_string();
         }
 
-        if let Ok(home) = cwd.strip_prefix(home) {
-            cwd = PathBuf::from("~").join(home);
+        if let Ok(path) = cwd.strip_prefix(&home) {
+            cwd = PathBuf::from("~").join(path);
+        } else if let Some(p) = compact_user_prefix(&cwd) {
+            return p;
         }
     }
 
@@ -58,24 +67,73 @@ fn compress(path: String) -> String {
 
     let parts: Vec<&str> = rest
         .iter()
-        .map(|s| {
-            let mut graphemes = s.grapheme_indices(true);
-            match graphemes.next() {
-                Some((_, g)) => {
-                    if g == "." {
-                        graphemes
-                            .next()
-                            .map(|(j, h)| &s[..j + h.len()])
-                            .unwrap_or(g)
-                    } else {
-                        g
-                    }
-                }
-                None => "",
-            }
-        })
+        .enumerate()
+        .map(|(i, c)| trim_component(i, c))
         .chain(iter::once(*last))
         .collect();
 
     parts.join("/")
+}
+
+fn trim_component(index: usize, component: &str) -> &str {
+    let mut graphemes = component.grapheme_indices(true);
+
+    match graphemes.next() {
+        Some((_, g)) => {
+            if g == "." {
+                graphemes
+                    .next()
+                    .map(|(j, h)| &component[..j + h.len()])
+                    .unwrap_or(g)
+            } else if index == 0 && g == "~" {
+                // path looks like ~user/some/other/folders
+                // /~user/some/other/folders would have ~user as its 2nd component, not its first
+                component
+            } else {
+                g
+            }
+        }
+        None => "",
+    }
+}
+
+fn compact_user_prefix(path: &Path) -> Option<String> {
+    let postfix = match path.strip_prefix(home_dir_prefix()) {
+        Ok(p) => p,
+        Err(_) => return None,
+    };
+
+    if let Some(Component::Normal(username)) = postfix.components().next() {
+        if !is_user(username) {
+            return None;
+        }
+
+        let mut prefix = OsString::from("~");
+        prefix.push(username);
+        let prefix = prefix.to_string_lossy();
+
+        let without_username = postfix.strip_prefix(username).unwrap();
+
+        if without_username.components().next().is_some() {
+            return Some(format!("{}/{}", prefix, without_username.display()));
+        } else {
+            return Some(prefix.into_owned());
+        }
+    }
+
+    None
+}
+
+fn home_dir_prefix() -> PathBuf {
+    if cfg!(target_os = "macos") {
+        PathBuf::from("/Users/")
+    } else {
+        PathBuf::from("/home/")
+    }
+}
+
+fn is_user(maybe_user: &OsStr) -> bool {
+    let maybe_user_ptr = maybe_user.as_bytes().as_ptr() as *const c_char;
+
+    !unsafe { libc::getpwnam(maybe_user_ptr) }.is_null()
 }
