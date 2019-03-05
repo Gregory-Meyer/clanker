@@ -2,14 +2,18 @@
 
 [![Crates.io](https://img.shields.io/crates/v/clanker.svg)](https://crates.io/crates/clanker)
 
-Clanker is a minimalistic set of command prompts for fish.
+Clanker is a theme for fish with a focus on minimalism.
 
-## Usage
+![Clanker demo](demo.png)
 
-First, install the package via `cargo install clanker`.
+## Installation
 
-Then put this in your `config.fish` or somewhere that will be sourced, ensuring
-that the location `cargo` installs to is in your `PATH`:
+```sh
+cargo install clanker
+```
+
+Then place this in your `config.fish` or somewhere that will be sourced when
+`fish` starts up:
 
 ```fish
 function fish_prompt
@@ -25,6 +29,19 @@ function fish_title
 end
 ```
 
+### Building From Source
+
+```sh
+git clone git@github.com:Gregory-Meyer/clanker.git
+cd clanker
+cargo build --release
+```
+
+You will then need to copy the binaries from `target/release` to somewhere in
+your `PATH`, like `/usr/local/bin`.
+
+## Usage
+
 ### `clanker-prompt`
 
 `clanker-prompt` takes no arguments and outputs the current username, hostname,
@@ -33,9 +50,9 @@ expected - if in the current user's home directory, the prefix is substituted
 with `~`. If in another user's home directory, the prefix is substituted with
 `~USER`. If there is more than one component in the path, all components but
 the last are trimmed to one or two extended grapheme clusters. Components are
-trimmed to two extended grapheme clusters if a) they begin with a `.` or b)
+trimmed to two extended grapheme clusters if 1. they begin with a `.` or 2.
 they begin with a `~` and also are the first component in the path - in other
-words, when we did prefix shortening to `~USER/other/path/components`.
+words, the result of prefix shortening to `~USER/other/path/components`.
 
 ### `clanker-right-prompt`
 
