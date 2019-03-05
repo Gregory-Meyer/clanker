@@ -3,6 +3,8 @@ name = "clanker"
 version = "0.1.0"
 authors = ["Gregory Meyer <gregjm@umich.edu>"]
 edition = "2018"
+description = "Minimalistic command prompt for fish."
+license = "MIT"
 
 [dependencies]
 colored = "^1.7.0"
