@@ -13,7 +13,7 @@ use libc::{c_char, c_int, c_void};
 use libgit2_sys::{git_diff, git_diff_delta};
 
 fn main() {
-    println!("{}", make_prompt());
+    print!("{}", make_prompt());
 }
 
 fn make_prompt() -> String {
