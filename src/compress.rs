@@ -82,15 +82,13 @@ fn trim_component(index: usize, component: &str) -> &str {
 
     match graphemes.next() {
         Some((_, g)) => {
-            if g == "." {
+            if g == "." || (index == 0 && g == "~") {
+                // or case for when path looks like ~user/some/other/folders
+                // /~user/some/other/folders would have ~user as its 2nd component, not first
                 graphemes
                     .next()
                     .map(|(j, h)| &component[..j + h.len()])
                     .unwrap_or(g)
-            } else if index == 0 && g == "~" {
-                // path looks like ~user/some/other/folders
-                // /~user/some/other/folders would have ~user as its 2nd component, not its first
-                component
             } else {
                 g
             }
