@@ -51,7 +51,9 @@ fn repo_head() -> Option<String> {
     };
 
     let head_commit = head.peel_to_commit().expect("couldn't peel HEAD to commit");
-    let mut head_tree = head_commit.tree().expect("couldn't get tree from HEAD commit");
+    let mut head_tree = head_commit
+        .tree()
+        .expect("couldn't get tree from HEAD commit");
 
     let mut has_diff = false;
 

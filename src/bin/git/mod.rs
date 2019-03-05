@@ -3,9 +3,8 @@ use std::{ffi::CStr, mem, ptr};
 use libc::{c_char, c_int, c_void, size_t};
 use libgit2_sys::{
     git_commit, git_diff, git_diff_notify_cb, git_diff_options, git_oid, git_reference,
-    git_repository, git_tree, GIT_DIFF_ENABLE_FAST_UNTRACKED_DIRS, GIT_DIFF_INCLUDE_UNMODIFIED,
-    GIT_DIFF_INCLUDE_UNTRACKED, GIT_DIFF_SKIP_BINARY_CHECK, GIT_DIFF_UPDATE_INDEX, GIT_OBJ_COMMIT,
-    GIT_OID_HEXSZ, GIT_REPOSITORY_OPEN_FROM_ENV,
+    git_repository, git_tree, GIT_DIFF_ENABLE_FAST_UNTRACKED_DIRS, GIT_DIFF_INCLUDE_UNTRACKED,
+    GIT_DIFF_SKIP_BINARY_CHECK, GIT_OBJ_COMMIT, GIT_OID_HEXSZ, GIT_REPOSITORY_OPEN_FROM_ENV,
 };
 
 pub struct Repository(*mut git_repository);
