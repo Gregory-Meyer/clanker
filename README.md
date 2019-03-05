@@ -29,9 +29,13 @@ end
 
 `clanker-prompt` takes no arguments and outputs the current username, hostname,
 and compressed directory. Compression of the current working directory is as
-expected - first, if in the home directory, it's substituted with `~`. If there
-is more than one component in the path, all components but the last are
-trimmed to one extended grapheme cluster, or two if the first is a `.`.
+expected - if in the current user's home directory, the prefix is substituted
+with `~`. If in another user's home directory, the prefix is substituted with
+`~USER`. If there is more than one component in the path, all components but
+the last are trimmed to one or two extended grapheme clusters. Components are
+trimmed to two extended grapheme clusters if a) they begin with a `.` or b)
+they begin with a `~` and also are the first component in the path - in other
+words, when we did prefix shortening to `~USER/other/path/components`.
 
 ### `clanker-right-prompt`
 
