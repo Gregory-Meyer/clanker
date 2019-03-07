@@ -60,9 +60,10 @@ words, the result of prefix shortening to `~USER/other/path/components`.
 argument. If the status was provided and was nonzero, it is printed in red. In
 addition, if the current directory is a git repository according to the
 behavior when running `git_repository_open_ext` with
-`REPOSITORY_OPEN_FROM_ENV`, the current branch or checkout out commit ID will
-be printed. If there are changes that would show up in `git status`, this will
-be indicated with a `*`.
+`REPOSITORY_OPEN_FROM_ENV`, this will indicate either the current branch HEAD
+points to, the current tag(s) that point to the same commit HEAD does, or the
+short 7-digit SHA sum of the checked-out commit. If more than one tag points
+to the same commit as HEAD, they will be delimited by a '\' (backslash).
 
 ### `clanker-title`
 
