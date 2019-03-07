@@ -24,7 +24,7 @@
 use std::{
     env,
     ffi::{CString, OsStr, OsString},
-    iter,
+    io, iter,
     os::unix::ffi::OsStrExt,
     path::{Component, Path, PathBuf},
 };
@@ -36,7 +36,7 @@ pub fn compressed_cwd() -> String {
 }
 
 fn cwd() -> String {
-    let cwd = match env::current_dir() {
+    let cwd = match current_dir() {
         Ok(p) => p,
         Err(_) => return "?".to_string(),
     };
@@ -56,6 +56,14 @@ fn cwd() -> String {
     }
 
     format!("{}", cwd.display())
+}
+
+fn current_dir() -> Result<PathBuf, io::Error> {
+    if let Some(path) = env::var_os("PWD") {
+        Ok(PathBuf::from(path))
+    } else {
+        env::current_dir()
+    }
 }
 
 fn compress(path: String) -> String {
