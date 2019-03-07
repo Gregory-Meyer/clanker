@@ -29,7 +29,6 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use libc::c_char;
 use unicode_segmentation::UnicodeSegmentation;
 
 pub fn compressed_cwd() -> String {
