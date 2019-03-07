@@ -24,7 +24,7 @@
 extern crate colored;
 extern crate git2;
 
-use std::env;
+use std::{env, process::Command, thread};
 
 use colored::Colorize;
 use git2::{Branch, Commit, Error, Repository};
@@ -57,32 +57,34 @@ fn make_prompt() -> String {
 }
 
 fn repo_head() -> Result<String, Error> {
+    let is_dirty_thread = thread::spawn(repository_is_dirty);
     let repo = Repository::open_from_env()?;
+    let identifier = identify_head(&repo)?;
+
+    if is_dirty_thread.join().ok().unwrap_or(false) {
+        Ok(format!("{} *", identifier))
+    } else {
+        Ok(identifier)
+    }
+}
+
+fn identify_head(repo: &Repository) -> Result<String, Error> {
     let head = repo.head()?;
 
     if head.is_branch() {
         let branch = Branch::wrap(head);
-        branch
-            .name_bytes()
-            .map(|n| String::from_utf8_lossy(n).into_owned())
-    } else {
-        let head_commit = head.peel_to_commit()?;
 
-        let mut buf = "refs/tags/".to_string();
+        Ok(String::from_utf8_lossy(branch.name_bytes()?).into_owned())
+    } else {
+        let head_commit = head.peel_to_commit()?; // this had better point to a commit...
+
+        let mut refname_buf = "refs/tags/".to_string(); // reuse on each iteration
         let tags = repo
             .tag_names(None)?
-            .iter()
+            .iter() // this irks me - git2-rs devs have decided only UTF-8 tags are allowed
             .filter_map(|n| n)
-            .filter(|n| tag_points_to_commit(&repo, n, &head_commit, &mut buf))
-            .fold(String::new(), |mut v, n| {
-                if !v.is_empty() {
-                    v.push('\\');
-                }
-
-                v.push_str(n);
-
-                v
-            });
+            .filter(|n| tag_points_to_commit(&repo, n, &head_commit, &mut refname_buf))
+            .fold(String::new(), append_tag_name);
 
         if tags.is_empty() {
             let mut id = head_commit.id().to_string();
@@ -93,6 +95,25 @@ fn repo_head() -> Result<String, Error> {
             Ok(tags)
         }
     }
+}
+
+fn repository_is_dirty() -> bool {
+    // this is much faster than checking for the first diff and then aborting
+    // difference on my computer was from 3s (hand rolled libgit2, abort after first diff) to
+    // 660 ms when using the future-style computation here
+    Command::new("git")
+        .arg("status")
+        .arg("--porcelain")
+        .output()
+        .ok()
+        .map(|output| {
+            if !output.status.success() {
+                return false;
+            }
+
+            !output.stdout.is_empty()
+        })
+        .unwrap_or(false)
 }
 
 fn tag_points_to_commit(
@@ -113,4 +134,16 @@ fn tag_points_to_commit(
     buf.truncate("refs/tags/".len());
 
     id == target.id()
+}
+
+fn append_tag_name(mut tags: String, tag_name: &str) -> String {
+    if !tags.is_empty() {
+        // backslash is one of few disallowed characters in git identifiers
+        // so we use it to delimit multiple tags
+        tags.push('\\');
+    }
+
+    tags.push_str(tag_name);
+
+    tags
 }
