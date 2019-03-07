@@ -27,7 +27,7 @@ extern crate git2;
 use std::env;
 
 use colored::Colorize;
-use git2::Repository;
+use git2::{Branch, Commit, Error, Repository};
 
 fn main() {
     print!("{}", make_prompt());
@@ -41,7 +41,7 @@ fn make_prompt() -> String {
         None => 0,
     };
 
-    if let Some(head) = repo_head() {
+    if let Ok(head) = repo_head() {
         if retc != 0 {
             format!("{} ({})", retc.to_string().red(), head)
         } else {
@@ -56,12 +56,61 @@ fn make_prompt() -> String {
     }
 }
 
-fn repo_head() -> Option<String> {
-    if let Ok(repo) = Repository::open_from_env() {
-        if let Ok(head) = repo.head() {
-            return head.shorthand().map(|n| n.to_string())
+fn repo_head() -> Result<String, Error> {
+    let repo = Repository::open_from_env()?;
+    let head = repo.head()?;
+
+    if head.is_branch() {
+        let branch = Branch::wrap(head);
+        branch
+            .name_bytes()
+            .map(|n| String::from_utf8_lossy(n).into_owned())
+    } else {
+        let head_commit = head.peel_to_commit()?;
+
+        let mut buf = "refs/tags/".to_string();
+        let tags = repo
+            .tag_names(None)?
+            .iter()
+            .filter_map(|n| n)
+            .filter(|n| tag_points_to_commit(&repo, n, &head_commit, &mut buf))
+            .fold(String::new(), |mut v, n| {
+                if !v.is_empty() {
+                    v.push('\\');
+                }
+
+                v.push_str(n);
+
+                v
+            });
+
+        if tags.is_empty() {
+            let mut id = head_commit.id().to_string();
+            id.truncate(7);
+
+            Ok(id)
+        } else {
+            Ok(tags)
         }
     }
+}
 
-    None
+fn tag_points_to_commit(
+    repo: &Repository,
+    tag_name: &str,
+    target: &Commit,
+    buf: &mut String,
+) -> bool {
+    buf.push_str(tag_name);
+
+    let id = repo
+        .find_reference(&buf)
+        .unwrap()
+        .peel_to_commit()
+        .unwrap()
+        .id();
+
+    buf.truncate("refs/tags/".len());
+
+    id == target.id()
 }
