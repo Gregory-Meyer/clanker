@@ -22,18 +22,12 @@
 // IN THE SOFTWARE.
 
 extern crate colored;
-extern crate libc;
-extern crate libgit2_sys;
+extern crate git2;
 
-mod git;
-
-use git::{DiffOptions, Repository};
-
-use std::env;
+use std::{env, process::Command, thread};
 
 use colored::Colorize;
-use libc::{c_char, c_int, c_void};
-use libgit2_sys::{git_diff, git_diff_delta};
+use git2::{Branch, Commit, Error, Repository};
 
 fn main() {
     print!("{}", make_prompt());
@@ -47,7 +41,7 @@ fn make_prompt() -> String {
         None => 0,
     };
 
-    if let Some(head) = repo_head() {
+    if let Ok(head) = repo_head() {
         if retc != 0 {
             format!("{} ({})", retc.to_string().red(), head)
         } else {
@@ -62,60 +56,94 @@ fn make_prompt() -> String {
     }
 }
 
-fn repo_head() -> Option<String> {
-    let mut repo = match Repository::open_from_env() {
-        Ok(r) => r,
-        Err(_) => return None,
-    };
+fn repo_head() -> Result<String, Error> {
+    let is_dirty_thread = thread::spawn(repository_is_dirty);
+    let repo = Repository::open_from_env()?;
+    let identifier = identify_head(&repo)?;
 
-    let head = match repo.head() {
-        Ok(h) => h,
-        Err(_) => return None,
-    };
-
-    let head_commit = head.peel_to_commit().expect("couldn't peel HEAD to commit");
-    let mut head_tree = head_commit
-        .tree()
-        .expect("couldn't get tree from HEAD commit");
-
-    let mut has_diff = false;
-
-    let options = DiffOptions::new()
-        .include_untracked()
-        .skip_binary_check()
-        .enable_fast_untracked_dirs()
-        .set_notify_cb(notify_cb)
-        .set_payload(&mut has_diff as *mut _ as *mut c_void);
-
-    match repo.diff_tree_to_workdir_with_index(Some(&mut head_tree), Some(&options)) {
-        _ => (),
-    };
-
-    if let Ok(name) = head.branch_name().map(|n| n.to_string_lossy()) {
-        if has_diff {
-            Some(format!("{} *", name))
-        } else {
-            Some(name.into_owned())
-        }
+    if is_dirty_thread.join().ok().unwrap_or(false) {
+        Ok(format!("{} *", identifier))
     } else {
-        let mut oid = head_commit.id().to_string();
-        oid.truncate(7);
+        Ok(identifier)
+    }
+}
 
-        if has_diff {
-            Some(format!("{} *", oid))
+fn identify_head(repo: &Repository) -> Result<String, Error> {
+    let head = repo.head()?;
+
+    if head.is_branch() {
+        let branch = Branch::wrap(head);
+
+        Ok(String::from_utf8_lossy(branch.name_bytes()?).into_owned())
+    } else {
+        let head_commit = head.peel_to_commit()?; // this had better point to a commit...
+
+        let mut refname_buf = "refs/tags/".to_string(); // reuse on each iteration
+        let tags = repo
+            .tag_names(None)?
+            .iter() // this irks me - git2-rs devs have decided only UTF-8 tags are allowed
+            .filter_map(|n| n)
+            .filter(|n| tag_points_to_commit(&repo, n, &head_commit, &mut refname_buf))
+            .fold(String::new(), append_tag_name);
+
+        if tags.is_empty() {
+            let mut id = head_commit.id().to_string();
+            id.truncate(7);
+
+            Ok(id)
         } else {
-            Some(oid)
+            Ok(tags)
         }
     }
 }
 
-extern "C" fn notify_cb(
-    _: *const git_diff,
-    _: *const git_diff_delta,
-    _: *const c_char,
-    has_changes: *mut c_void,
-) -> c_int {
-    unsafe { *(has_changes as *mut bool) = true };
+fn repository_is_dirty() -> bool {
+    // this is much faster than checking for the first diff and then aborting
+    // difference on my computer was from 3s (hand rolled libgit2, abort after first diff) to
+    // 660 ms when using the future-style computation here
+    Command::new("git")
+        .arg("status")
+        .arg("--porcelain")
+        .output()
+        .ok()
+        .map(|output| {
+            if !output.status.success() {
+                return false;
+            }
 
-    -1 // stop diff iteration
+            !output.stdout.is_empty()
+        })
+        .unwrap_or(false)
+}
+
+fn tag_points_to_commit(
+    repo: &Repository,
+    tag_name: &str,
+    target: &Commit,
+    buf: &mut String,
+) -> bool {
+    buf.push_str(tag_name);
+
+    let id = repo
+        .find_reference(&buf)
+        .unwrap()
+        .peel_to_commit()
+        .unwrap()
+        .id();
+
+    buf.truncate("refs/tags/".len());
+
+    id == target.id()
+}
+
+fn append_tag_name(mut tags: String, tag_name: &str) -> String {
+    if !tags.is_empty() {
+        // backslash is one of few disallowed characters in git identifiers
+        // so we use it to delimit multiple tags
+        tags.push('\\');
+    }
+
+    tags.push_str(tag_name);
+
+    tags
 }
