@@ -1,6 +1,6 @@
 [package]
 name = "clanker"
-version = "0.4.1"
+version = "0.4.2"
 authors = ["Gregory Meyer <gregjm@umich.edu>"]
 edition = "2018"
 description = "Minimalistic command prompt for fish."
