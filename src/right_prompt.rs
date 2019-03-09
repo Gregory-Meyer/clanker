@@ -21,13 +21,16 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 
-extern crate git2;
+extern crate libgit2_sys;
 
 mod color;
+mod git;
+
+use git::Repository;
+
+use std::{env, process::Command, thread};
 
 use color::Color;
-use git2::{Branch, Commit, Error, Repository};
-use std::{env, process::Command, thread};
 
 fn main() {
     print!("{}", make_prompt());
@@ -41,7 +44,7 @@ fn make_prompt() -> String {
         None => 0,
     };
 
-    if let Ok(head) = repo_head() {
+    if let Some(head) = repo_head() {
         if retc != 0 {
             format!("{} ({})", retc.to_string().red(), head)
         } else {
@@ -56,43 +59,45 @@ fn make_prompt() -> String {
     }
 }
 
-fn repo_head() -> Result<String, Error> {
+macro_rules! try_option {
+    ($x:expr) => {
+        match $x {
+            Some(x) => x,
+            None => return None,
+        }
+    };
+}
+
+fn repo_head() -> Option<String> {
     let is_dirty_thread = thread::spawn(repository_is_dirty);
-    let repo = Repository::open_from_env()?;
-    let identifier = identify_head(&repo)?;
+
+    let repo = try_option!(Repository::open_from_env());
+    let identifier = try_option!(identify_head(&repo));
 
     if is_dirty_thread.join().ok().unwrap_or(false) {
-        Ok(format!("{} *", identifier))
+        Some(format!("{} *", identifier))
     } else {
-        Ok(identifier)
+        Some(identifier)
     }
 }
 
-fn identify_head(repo: &Repository) -> Result<String, Error> {
-    let head = repo.head()?;
+fn identify_head(repo: &Repository) -> Option<String> {
+    let head = try_option!(repo.head());
 
-    if head.is_branch() {
-        let branch = Branch::wrap(head);
-
-        Ok(String::from_utf8_lossy(branch.name_bytes()?).into_owned())
+    if let Some(name) = head.branch_name() {
+        Some(name.to_string_lossy().into_owned())
     } else {
-        let head_commit = head.peel_to_commit()?; // this had better point to a commit...
-
-        let mut refname_buf = "refs/tags/".to_string(); // reuse on each iteration
+        let head_commit = try_option!(head.peel_to_commit()); // this had better point to a commit...
         let tags = repo
-            .tag_names(None)?
-            .iter() // this irks me - git2-rs devs have decided only UTF-8 tags are allowed
-            .filter_map(|n| n)
-            .filter(|n| tag_points_to_commit(&repo, n, &head_commit, &mut refname_buf))
-            .fold(String::new(), append_tag_name);
+            .tags_pointing_to(&head_commit)
+            .unwrap_or_else(|| Vec::new());
 
         if tags.is_empty() {
-            let mut id = head_commit.id().to_string();
-            id.truncate(7);
-
-            Ok(id)
+            head_commit.as_object().short_id()
         } else {
-            Ok(tags)
+            let tag_names: Vec<_> = tags.iter().map(|n| n.to_string_lossy()).collect();
+
+            Some(tag_names.join("\\"))
         }
     }
 }
@@ -114,36 +119,4 @@ fn repository_is_dirty() -> bool {
             !output.stdout.is_empty()
         })
         .unwrap_or(false)
-}
-
-fn tag_points_to_commit(
-    repo: &Repository,
-    tag_name: &str,
-    target: &Commit,
-    buf: &mut String,
-) -> bool {
-    buf.push_str(tag_name);
-
-    let id = repo
-        .find_reference(&buf)
-        .unwrap()
-        .peel_to_commit()
-        .unwrap()
-        .id();
-
-    buf.truncate("refs/tags/".len());
-
-    id == target.id()
-}
-
-fn append_tag_name(mut tags: String, tag_name: &str) -> String {
-    if !tags.is_empty() {
-        // backslash is one of few disallowed characters in git identifiers
-        // so we use it to delimit multiple tags
-        tags.push('\\');
-    }
-
-    tags.push_str(tag_name);
-
-    tags
 }
