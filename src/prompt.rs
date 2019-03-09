@@ -21,38 +21,63 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 
-extern crate colored;
-extern crate dirs;
 extern crate libc;
-extern crate nix;
 extern crate unicode_segmentation;
-extern crate whoami;
 
+mod color;
 mod compress;
 
-use colored::Colorize;
-use nix::unistd::{self, Uid};
+use color::Color;
+use std::{env, ffi::CStr, mem};
 
 fn main() {
     let cwd = compress::compressed_cwd();
 
-    if is_current_user_priviliged() {
-        print!(
-            "{}@{} {}# ",
-            whoami::username(),
-            whoami::hostname(),
-            cwd.red()
-        )
+    let (cursor, root_cursor) = cursors();
+    let (username, is_root) = username_and_is_root();
+
+    if is_root {
+        print!("{}@{} {}{} ", username, hostname(), cwd.red(), root_cursor)
     } else {
-        print!(
-            "{}@{} {}> ",
-            whoami::username(),
-            whoami::hostname(),
-            cwd.green()
-        )
+        print!("{}@{} {}{} ", username, hostname(), cwd.green(), cursor)
     }
 }
 
-fn is_current_user_priviliged() -> bool {
-    unistd::geteuid() == Uid::from_raw(0)
+fn cursors() -> (String, String) {
+    let mut iter = env::args_os();
+
+    iter.next(); // skip first arg, the exec name
+
+    let cursor = iter
+        .next()
+        .map(|c| c.to_string_lossy().into_owned())
+        .unwrap_or_else(|| ">".to_string());
+    let root_cursor = iter
+        .next()
+        .map(|c| c.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "#".to_string());
+
+    (cursor, root_cursor)
+}
+
+fn username_and_is_root() -> (String, bool) {
+    let euid = unsafe { libc::geteuid() };
+    let passwd = unsafe { libc::getpwuid(euid) };
+    assert!(!passwd.is_null());
+
+    let username = unsafe { CStr::from_ptr((*passwd).pw_name) };
+
+    (username.to_string_lossy().into_owned(), euid == 0)
+}
+
+fn hostname() -> String {
+    // less work than utsname - no dynamic alloc for hostname buffer
+    // probably
+    let mut utsname: libc::utsname = unsafe { mem::uninitialized() };
+    let ret = unsafe { libc::uname(&mut utsname) };
+    assert_eq!(ret, 0);
+
+    let hostname = unsafe { CStr::from_ptr(utsname.nodename.as_ptr()) };
+
+    hostname.to_string_lossy().into_owned()
 }
