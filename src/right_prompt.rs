@@ -21,13 +21,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 
-extern crate colored;
 extern crate git2;
 
-use std::{env, process::Command, thread};
+mod color;
 
-use colored::Colorize;
+use color::Color;
 use git2::{Branch, Commit, Error, Repository};
+use std::{env, process::Command, thread};
 
 fn main() {
     print!("{}", make_prompt());
