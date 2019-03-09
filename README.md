@@ -44,15 +44,20 @@ your `PATH`, like `/usr/local/bin`.
 
 ### `clanker-prompt`
 
-`clanker-prompt` takes no arguments and outputs the current username, hostname,
-and compressed directory. Compression of the current working directory is as
-expected - if in the current user's home directory, the prefix is substituted
-with `~`. If in another user's home directory, the prefix is substituted with
-`~USER`. If there is more than one component in the path, all components but
-the last are trimmed to one or two extended grapheme clusters. Components are
-trimmed to two extended grapheme clusters if 1. they begin with a `.` or 2.
-they begin with a `~` and also are the first component in the path - in other
-words, the result of prefix shortening to `~USER/other/path/components`.
+`clanker-prompt` optionally takes up to two arguments and outputs the current
+username, hostname, and compressed directory. Compression of the current
+working directory is as expected - if in the current user's home directory, the
+prefix is substituted with `~`. If in another user's home directory, the prefix
+is substituted with `~USER`. If there is more than one component in the path,
+all components but the last are trimmed to one or two extended grapheme
+clusters. Components are trimmed to two extended grapheme clusters if 1. they
+begin with a `.` or 2. they begin with a `~` and also are the first component
+in the path - in other words, the result of prefix shortening to
+`~USER/other/path/components`.
+
+The two optional arguments are the unpriviliged cursor and priviliged cursor,
+respectively. These default to `>` and `#` but you replace them at runtime
+using these arguments.
 
 ### `clanker-right-prompt`
 

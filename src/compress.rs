@@ -41,7 +41,7 @@ fn cwd() -> String {
         Err(_) => return "?".to_string(),
     };
 
-    if let Some(home) = dirs::home_dir() {
+    if let Some(home) = home_dir() {
         if home == cwd {
             return "~".to_string();
         }
@@ -56,6 +56,10 @@ fn cwd() -> String {
     }
 
     format!("{}", cwd.display())
+}
+
+fn home_dir() -> Option<PathBuf> {
+    env::var_os("HOME").map(PathBuf::from)
 }
 
 fn current_dir() -> Result<PathBuf, io::Error> {
