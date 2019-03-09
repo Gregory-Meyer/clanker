@@ -31,7 +31,7 @@ use color::Color;
 use std::{env, ffi::CStr, mem};
 
 fn main() {
-    let cwd = compress::compressed_cwd();
+    let cwd = compress::cwd().unwrap_or_else(|_| "?".to_string());
 
     let (cursor, root_cursor) = cursors();
     let (username, is_root) = username_and_is_root();

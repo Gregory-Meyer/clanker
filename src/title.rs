@@ -30,10 +30,11 @@ use std::env;
 
 fn main() {
     let args: Vec<_> = env::args().collect();
+    let cwd = compress::cwd().unwrap_or_else(|_| "?".to_string());
 
     if let Some(running) = args.get(1) {
-        print!("{} {}", running, compress::compressed_cwd())
+        print!("{} {}", running, cwd)
     } else {
-        print!("{}", compress::compressed_cwd());
+        print!("{}", cwd);
     }
 }

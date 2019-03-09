@@ -24,38 +24,19 @@
 use std::{
     env,
     ffi::{CString, OsStr, OsString},
-    io, iter,
+    io,
     os::unix::ffi::OsStrExt,
     path::{Component, Path, PathBuf},
 };
 
 use unicode_segmentation::UnicodeSegmentation;
 
-pub fn compressed_cwd() -> String {
-    compress(cwd())
-}
-
-fn cwd() -> String {
-    let cwd = match current_dir() {
-        Ok(p) => p,
-        Err(_) => return "?".to_string(),
-    };
-
-    if let Some(home) = home_dir() {
-        if home == cwd {
-            return "~".to_string();
-        }
-
-        if let Ok(path) = cwd.strip_prefix(&home) {
-            return format!("{}", PathBuf::from("~").join(path).display());
-        }
-    }
-
-    if let Some(p) = compact_user_prefix(&cwd) {
-        return p;
-    }
-
-    format!("{}", cwd.display())
+pub fn cwd() -> Result<String, io::Error> {
+    current_dir().map(|p| {
+        p.into_os_string()
+            .into_string()
+            .unwrap_or_else(|s| s.to_string_lossy().into_owned())
+    }).map(compress)
 }
 
 fn home_dir() -> Option<PathBuf> {
@@ -71,21 +52,28 @@ fn current_dir() -> Result<PathBuf, io::Error> {
 }
 
 fn compress(path: String) -> String {
-    let components: Vec<&str> = path.split('/').collect();
-    let (last, rest) = components.split_last().unwrap();
+    let (components, last) = path.split_at(path.rfind('/').unwrap());
 
-    if rest.is_empty() {
-        return last.to_string();
+    if components.is_empty() {
+        return path;
     }
 
-    let parts: Vec<&str> = rest
-        .iter()
-        .enumerate()
-        .map(|(i, c)| trim_component(i, c))
-        .chain(iter::once(*last))
-        .collect();
+    let mut compressed = String::with_capacity(path.len());
 
-    parts.join("/")
+    let mut is_first = false;
+    for grapheme in components.graphemes(true) {
+        if grapheme == "/" {
+            compressed.push('/');
+            is_first = true;
+        } else if is_first {
+            compressed.push_str(grapheme);
+            is_first = false;
+        }
+    }
+
+    compressed.push_str(last); // last includes the '/'
+
+    compressed
 }
 
 fn trim_component(index: usize, component: &str) -> &str {
