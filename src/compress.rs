@@ -125,17 +125,33 @@ fn compress_home_prefix(path: String) -> String {
         return output;
     }
 
-    for (username, user_home) in get_home_dirs() {
-        if path.starts_with(&user_home) {
-            let mut output =
-                String::with_capacity(path.len() - user_home.len() + username.len() + 1);
+    while let Some(entry) = NonNull::new(unsafe { libc::getpwent() }) {
+        let entry: &passwd = unsafe { &entry.as_ref() };
+
+        let home = from_posix(entry.pw_dir);
+        let shell = from_posix(entry.pw_shell);
+
+        if shell == "/bin/false" || shell == "/sbin/nologin" || home != "/" {
+            continue;
+        }
+
+        let username = from_posix(entry.pw_name);
+        let home = home.to_string_lossy();
+
+        if path.starts_with(home.as_ref()) {
+            let mut output = String::with_capacity(path.len() - home.len() + username.len() + 1);
+
             output.push('~');
-            output.push_str(&username);
-            output.push_str(&path[user_home.len()..]);
+            output.push_str(username.to_string_lossy().as_ref());
+            output.push_str(&path[home.len()..]);
+
+            unsafe { libc::endpwent() };
 
             return output;
         }
     }
+
+    unsafe { libc::endpwent() };
 
     path
 }
@@ -144,30 +160,58 @@ fn from_posix<'a>(s: *const c_char) -> &'a OsStr {
     OsStr::from_bytes(unsafe { CStr::from_ptr(s) }.to_bytes())
 }
 
-fn get_home_dirs() -> Vec<(String, String)> {
-    // (username, home dir)
-    let mut users = Vec::new();
-
-    while let Some(entry) = NonNull::new(unsafe { libc::getpwent() }) {
-        let entry: &passwd = unsafe { &entry.as_ref() };
-
-        let username = from_posix(entry.pw_name);
-        let home = from_posix(entry.pw_dir);
-        let shell = from_posix(entry.pw_shell);
-
-        if shell != "/bin/false" && shell != "/sbin/nologin" && home != "/" {
-            users.push((
-                username.to_string_lossy().into_owned(),
-                home.to_string_lossy().into_owned(),
-            ));
-        }
-    }
-
-    unsafe { libc::endpwent() };
-
-    users
-}
-
 fn home_dir() -> Option<PathBuf> {
     env::var_os("HOME").map(PathBuf::from)
+}
+
+#[cfg(all(test, nightly))]
+mod tests {
+    use super::*;
+    use test::Bencher;
+
+    #[bench]
+    fn bench_compress_home(b: &mut Bencher) {
+        let home = home_dir().unwrap().into_string_lossy();
+
+        b.iter(|| compress(home.clone()));
+    }
+
+    #[bench]
+    fn bench_compress_home_long(b: &mut Bencher) {
+        let mut home = home_dir().unwrap();
+        home.push("this/sure/is/a/super/long/pathname");
+        let home = home.into_string_lossy();
+
+        b.iter(|| compress(home.clone()));
+    }
+
+    #[bench]
+    fn bench_compress_root_home(b: &mut Bencher) {
+        let home = "/root".to_string();
+
+        b.iter(|| compress(home.clone()));
+    }
+
+    #[bench]
+    fn bench_compress_root_home_long(b: &mut Bencher) {
+        let mut home = PathBuf::from("/root");
+        home.push("this/sure/is/a/super/long/pathname");
+        let home = home.into_string_lossy();
+
+        b.iter(|| compress(home.clone()));
+    }
+
+    #[bench]
+    fn bench_compress_no_prefix(b: &mut Bencher) {
+        let home = "/usr/local/bin".to_string();
+
+        b.iter(|| compress(home.clone()));
+    }
+
+    #[bench]
+    fn bench_compress_no_prefix_long(b: &mut Bencher) {
+        let home = "/usr/include/c++/8.2.1/experimental/bits".to_string();
+
+        b.iter(|| compress(home.clone()));
+    }
 }
