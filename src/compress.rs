@@ -32,11 +32,13 @@ use std::{
 use unicode_segmentation::UnicodeSegmentation;
 
 pub fn cwd() -> Result<String, io::Error> {
-    current_dir().map(|p| {
-        p.into_os_string()
-            .into_string()
-            .unwrap_or_else(|s| s.to_string_lossy().into_owned())
-    }).map(compress)
+    current_dir()
+        .map(|p| {
+            p.into_os_string()
+                .into_string()
+                .unwrap_or_else(|s| s.to_string_lossy().into_owned())
+        })
+        .map(compress)
 }
 
 fn home_dir() -> Option<PathBuf> {
