@@ -23,14 +23,11 @@
 
 use std::{
     env,
-    ffi::{CStr, OsStr, OsString},
+    ffi::{CString, OsString},
     io,
-    os::unix::ffi::OsStrExt,
     path::PathBuf,
-    ptr::NonNull,
 };
 
-use libc::{c_char, passwd};
 use unicode_segmentation::UnicodeSegmentation;
 
 pub trait IntoStringLossy {
@@ -81,32 +78,30 @@ fn compress(path: String) -> String {
 
     let mut compressed = String::with_capacity(home_compressed.len());
 
-    let mut first_segment = true;
-    let mut first_grapheme_in_segment = false;
-    for grapheme in components.graphemes(true) {
-        if first_segment {
-            if grapheme == "~" {
-                compressed.push('~');
-            } else if grapheme == "/" {
-                compressed.push('/');
-                first_segment = false;
-                first_grapheme_in_segment = true;
-            } else {
-                compressed.push_str(grapheme);
-                first_segment = false;
-            }
-        } else {
-            if grapheme == "/" {
-                compressed.push('/');
-                first_grapheme_in_segment = true;
-            } else if first_grapheme_in_segment && grapheme != "/" {
-                compressed.push_str(grapheme);
-                first_grapheme_in_segment = grapheme == ".";
+    for (i, component) in components.split('/').enumerate() {
+        if i != 0 {
+            compressed.push('/');
+        }
+
+        let mut iter = component.graphemes(true);
+
+        if let Some(grapheme) = iter.next() {
+            compressed.push_str(grapheme);
+
+            if i == 0 && (grapheme == "~" || grapheme == ".") {
+                if let Some(next) = iter.next() {
+                    compressed.push_str(next);
+                }
+            } else if grapheme == "." {
+                if let Some(next) = iter.next() {
+                    compressed.push_str(next);
+                }
             }
         }
     }
 
-    compressed.push_str(last); // last includes the '/'
+    // last includes the '/'
+    compressed.push_str(last);
 
     compressed
 }
@@ -125,93 +120,134 @@ fn compress_home_prefix(path: String) -> String {
         return output;
     }
 
-    while let Some(entry) = NonNull::new(unsafe { libc::getpwent() }) {
-        let entry: &passwd = unsafe { &entry.as_ref() };
+    let root_prefix = if cfg!(target_os = "macos") {
+        "/var/root"
+    } else {
+        "/root"
+    };
 
-        let home = from_posix(entry.pw_dir);
-        let shell = from_posix(entry.pw_shell);
+    if path.starts_with(root_prefix) {
+        let without_prefix = &path[root_prefix.len()..];
 
-        if shell == "/bin/false" || shell == "/sbin/nologin" || home != "/" {
-            continue;
-        }
+        let mut output = String::with_capacity(without_prefix.len() + 5);
+        output.push_str("~root");
+        output.push_str(without_prefix);
 
-        let username = from_posix(entry.pw_name);
-        let home = home.to_string_lossy();
-
-        if path.starts_with(home.as_ref()) {
-            let mut output = String::with_capacity(path.len() - home.len() + username.len() + 1);
-
-            output.push('~');
-            output.push_str(username.to_string_lossy().as_ref());
-            output.push_str(&path[home.len()..]);
-
-            unsafe { libc::endpwent() };
-
-            return output;
-        }
+        return output;
     }
 
-    unsafe { libc::endpwent() };
+    let home_prefix = if cfg!(target_os = "macos") {
+        "/Users/"
+    } else {
+        "/home/"
+    };
 
-    path
-}
+    if !path.starts_with(home_prefix) {
+        return path;
+    }
 
-fn from_posix<'a>(s: *const c_char) -> &'a OsStr {
-    OsStr::from_bytes(unsafe { CStr::from_ptr(s) }.to_bytes())
+    let without_prefix = &path[home_prefix.len()..];
+    let maybe_username = if let Some(i) = without_prefix.find('/') {
+        &without_prefix[..i]
+    } else {
+        without_prefix
+    };
+
+    let to_check = CString::new(maybe_username).unwrap();
+
+    if unsafe { libc::getpwnam(to_check.as_ptr()).is_null() } {
+        return path;
+    }
+
+    let mut output = String::with_capacity(path.len() - home_prefix.len() + 1);
+    output.push('~');
+    output.push_str(without_prefix);
+
+    output
 }
 
 fn home_dir() -> Option<PathBuf> {
     env::var_os("HOME").map(PathBuf::from)
 }
 
-#[cfg(all(test, nightly))]
+#[cfg(test)]
 mod tests {
     use super::*;
-    use test::Bencher;
 
-    #[bench]
-    fn bench_compress_home(b: &mut Bencher) {
+    #[test]
+    fn compress_home() {
         let home = home_dir().unwrap().into_string_lossy();
 
-        b.iter(|| compress(home.clone()));
+        assert!(compress(home) == "~");
     }
 
-    #[bench]
-    fn bench_compress_home_long(b: &mut Bencher) {
-        let mut home = home_dir().unwrap();
-        home.push("this/sure/is/a/super/long/pathname");
-        let home = home.into_string_lossy();
+    #[test]
+    fn compress_home_long() {
+        let mut path = home_dir().unwrap();
+        path.push("include/c++/8.2.1/experimental/bits");
+        let path = path.into_string_lossy();
+        eprintln!("path: {}", path);
 
-        b.iter(|| compress(home.clone()));
+        let compressed = compress(path);
+        eprintln!("compressed: {}", compressed);
+
+        assert!(compressed == "~/i/c/8/e/bits");
     }
 
-    #[bench]
-    fn bench_compress_root_home(b: &mut Bencher) {
-        let home = "/root".to_string();
+    #[test]
+    fn compress_home_config() {
+        let mut path = home_dir().unwrap();
+        path.push(".config/sway");
+        let path = path.into_string_lossy();
 
-        b.iter(|| compress(home.clone()));
+        eprintln!("path: {}", path);
+
+        let compressed = compress(path);
+        eprintln!("compressed: {}", compressed);
+
+        assert!(compressed == "~/.c/sway");
     }
 
-    #[bench]
-    fn bench_compress_root_home_long(b: &mut Bencher) {
-        let mut home = PathBuf::from("/root");
-        home.push("this/sure/is/a/super/long/pathname");
-        let home = home.into_string_lossy();
-
-        b.iter(|| compress(home.clone()));
+    #[test]
+    fn compress_long() {
+        assert!(
+            compress("/usr/include/c++/8.2.1/experimental/bits".to_string()) == "/u/i/c/8/e/bits"
+        );
     }
 
-    #[bench]
-    fn bench_compress_no_prefix(b: &mut Bencher) {
-        let home = "/usr/local/bin".to_string();
+    #[test]
+    fn compress_root() {
+        let root_home = if cfg!(target_os = "macos") {
+            "/var/root"
+        } else {
+            "/root"
+        };
 
-        b.iter(|| compress(home.clone()));
+        assert!(compress(root_home.to_string()) == "~root");
     }
 
-    #[bench]
-    fn bench_compress_no_prefix_long(b: &mut Bencher) {
-        let home = "/usr/include/c++/8.2.1/experimental/bits".to_string();
+    #[test]
+    fn compress_root_long() {
+        let root_home = if cfg!(target_os = "macos") {
+            "/var/root"
+        } else {
+            "/root"
+        };
+        let path = format!("{}/include/c++/8.2.1/experimental/bits", root_home);
+        let compressed = compress(path);
 
-        b.iter(|| compress(home.clone()));
+        eprintln!("{}", compressed);
+
+        assert!(compressed == "~r/i/c/8/e/bits");
+    }
+
+    #[test]
+    fn compress_many_dots() {
+        let path = "/usr/local/bin/.config/.foo/.bar/..baz/qux".to_string();
+        let compressed = compress(path);
+
+        eprintln!("{}", compressed);
+
+        assert!(compressed == "/u/l/b/.c/.f/.b/../qux");
     }
 }

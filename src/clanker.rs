@@ -21,8 +21,5 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 
-#![feature(test)]
-extern crate test;
-
 pub mod compress;
 pub mod git;
