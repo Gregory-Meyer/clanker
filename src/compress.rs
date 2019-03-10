@@ -23,13 +23,32 @@
 
 use std::{
     env,
-    ffi::{CString, OsStr, OsString},
+    ffi::{CStr, OsStr, OsString},
     io,
     os::unix::ffi::OsStrExt,
-    path::{Component, Path, PathBuf},
+    path::PathBuf,
+    ptr::NonNull,
 };
 
+use libc::{c_char, passwd};
 use unicode_segmentation::UnicodeSegmentation;
+
+pub trait IntoStringLossy {
+    fn into_string_lossy(self) -> String;
+}
+
+impl IntoStringLossy for OsString {
+    fn into_string_lossy(self) -> String {
+        self.into_string()
+            .unwrap_or_else(|s| s.to_string_lossy().into_owned())
+    }
+}
+
+impl IntoStringLossy for PathBuf {
+    fn into_string_lossy(self) -> String {
+        self.into_os_string().into_string_lossy()
+    }
+}
 
 pub fn cwd() -> Result<String, io::Error> {
     current_dir()
@@ -41,10 +60,6 @@ pub fn cwd() -> Result<String, io::Error> {
         .map(compress)
 }
 
-fn home_dir() -> Option<PathBuf> {
-    env::var_os("HOME").map(PathBuf::from)
-}
-
 fn current_dir() -> Result<PathBuf, io::Error> {
     if let Some(path) = env::var_os("PWD") {
         Ok(PathBuf::from(path))
@@ -54,22 +69,40 @@ fn current_dir() -> Result<PathBuf, io::Error> {
 }
 
 fn compress(path: String) -> String {
-    let (components, last) = path.split_at(path.rfind('/').unwrap());
+    let home_compressed = compress_home_prefix(path);
+    let (components, last) = match home_compressed.rfind('/') {
+        Some(i) => home_compressed.split_at(i),
+        None => return home_compressed,
+    };
 
     if components.is_empty() {
-        return path;
+        return home_compressed;
     }
 
-    let mut compressed = String::with_capacity(path.len());
+    let mut compressed = String::with_capacity(home_compressed.len());
 
-    let mut is_first = false;
+    let mut first_segment = true;
+    let mut first_grapheme_in_segment = false;
     for grapheme in components.graphemes(true) {
-        if grapheme == "/" {
-            compressed.push('/');
-            is_first = true;
-        } else if is_first {
-            compressed.push_str(grapheme);
-            is_first = false;
+        if first_segment {
+            if grapheme == "~" {
+                compressed.push('~');
+            } else if grapheme == "/" {
+                compressed.push('/');
+                first_segment = false;
+                first_grapheme_in_segment = true;
+            } else {
+                compressed.push_str(grapheme);
+                first_segment = false;
+            }
+        } else {
+            if grapheme == "/" {
+                compressed.push('/');
+                first_grapheme_in_segment = true;
+            } else if first_grapheme_in_segment && grapheme != "/" {
+                compressed.push_str(grapheme);
+                first_grapheme_in_segment = grapheme == ".";
+            }
         }
     }
 
@@ -78,63 +111,63 @@ fn compress(path: String) -> String {
     compressed
 }
 
-fn trim_component(index: usize, component: &str) -> &str {
-    let mut graphemes = component.grapheme_indices(true);
-
-    match graphemes.next() {
-        Some((_, g)) => {
-            if g == "." || (index == 0 && g == "~") {
-                // or case for when path looks like ~user/some/other/folders
-                // /~user/some/other/folders would have ~user as its 2nd component, not first
-                graphemes
-                    .next()
-                    .map(|(j, h)| &component[..j + h.len()])
-                    .unwrap_or(g)
-            } else {
-                g
-            }
-        }
-        None => "",
-    }
-}
-
-fn compact_user_prefix(path: &Path) -> Option<String> {
-    let postfix = match path.strip_prefix(home_dir_prefix()) {
-        Ok(p) => p,
-        Err(_) => return None,
+fn compress_home_prefix(path: String) -> String {
+    let home_path = match home_dir() {
+        Some(p) => p.into_string_lossy(),
+        None => return path,
     };
 
-    if let Some(Component::Normal(username)) = postfix.components().next() {
-        if !is_user(username) {
-            return None;
-        }
+    if path.starts_with(&home_path) {
+        let mut output = String::with_capacity(path.len() - home_path.len() + 1);
+        output.push('~');
+        output.push_str(&path[home_path.len()..]);
 
-        let mut prefix = OsString::from("~");
-        prefix.push(username);
-        let prefix = prefix.to_string_lossy();
+        return output;
+    }
 
-        let without_username = postfix.strip_prefix(username).unwrap();
+    for (username, user_home) in get_home_dirs() {
+        if path.starts_with(&user_home) {
+            let mut output =
+                String::with_capacity(path.len() - user_home.len() + username.len() + 1);
+            output.push('~');
+            output.push_str(&username);
+            output.push_str(&path[user_home.len()..]);
 
-        if without_username.components().next().is_some() {
-            return Some(format!("{}/{}", prefix, without_username.display()));
-        } else {
-            return Some(prefix.into_owned());
+            return output;
         }
     }
 
-    None
+    path
 }
 
-fn home_dir_prefix() -> PathBuf {
-    if cfg!(target_os = "macos") {
-        PathBuf::from("/Users/")
-    } else {
-        PathBuf::from("/home/")
+fn from_posix<'a>(s: *const c_char) -> &'a OsStr {
+    OsStr::from_bytes(unsafe { CStr::from_ptr(s) }.to_bytes())
+}
+
+fn get_home_dirs() -> Vec<(String, String)> {
+    // (username, home dir)
+    let mut users = Vec::new();
+
+    while let Some(entry) = NonNull::new(unsafe { libc::getpwent() }) {
+        let entry: &passwd = unsafe { &entry.as_ref() };
+
+        let username = from_posix(entry.pw_name);
+        let home = from_posix(entry.pw_dir);
+        let shell = from_posix(entry.pw_shell);
+
+        if shell != "/bin/false" && shell != "/sbin/nologin" && home != "/" {
+            users.push((
+                username.to_string_lossy().into_owned(),
+                home.to_string_lossy().into_owned(),
+            ));
+        }
     }
+
+    unsafe { libc::endpwent() };
+
+    users
 }
 
-fn is_user(maybe_user: &OsStr) -> bool {
-    let maybe_user_nullterm = CString::new(maybe_user.as_bytes()).unwrap();
-
-    !unsafe { libc::getpwnam(maybe_user_nullterm.as_ptr()) }.is_null()
+fn home_dir() -> Option<PathBuf> {
+    env::var_os("HOME").map(PathBuf::from)
 }
