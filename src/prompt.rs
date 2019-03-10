@@ -28,10 +28,12 @@ mod color;
 mod compress;
 
 use color::Color;
+use compress::IntoStringLossy;
+
 use std::{env, ffi::CStr, mem};
 
 fn main() {
-    let cwd = compress::compressed_cwd();
+    let cwd = compress::cwd().unwrap_or_else(|_| "?".to_string());
 
     let (cursor, root_cursor) = cursors();
     let (username, is_root) = username_and_is_root();
@@ -50,11 +52,11 @@ fn cursors() -> (String, String) {
 
     let cursor = iter
         .next()
-        .map(|c| c.to_string_lossy().into_owned())
+        .map(|c| c.into_string_lossy())
         .unwrap_or_else(|| ">".to_string());
     let root_cursor = iter
         .next()
-        .map(|c| c.to_string_lossy().into_owned())
+        .map(|c| c.into_string_lossy())
         .unwrap_or_else(|| "#".to_string());
 
     (cursor, root_cursor)

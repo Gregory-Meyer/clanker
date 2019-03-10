@@ -21,20 +21,5 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 
-extern crate libc;
-extern crate unicode_segmentation;
-
-mod compress;
-
-use std::env;
-
-fn main() {
-    let args: Vec<_> = env::args().collect();
-    let cwd = compress::cwd().unwrap_or_else(|_| "?".to_string());
-
-    if let Some(running) = args.get(1) {
-        print!("{} {}", running, cwd)
-    } else {
-        print!("{}", cwd);
-    }
-}
+pub mod compress;
+pub mod git;

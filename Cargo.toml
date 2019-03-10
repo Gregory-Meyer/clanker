@@ -1,6 +1,6 @@
 [package]
 name = "clanker"
-version = "0.4.2"
+version = "0.4.3"
 authors = ["Gregory Meyer <gregjm@umich.edu>"]
 edition = "2018"
 description = "Minimalistic command prompt for fish."
@@ -24,3 +24,8 @@ path = "src/right_prompt.rs"
 [[bin]]
 name = "clanker-title"
 path = "src/title.rs"
+
+[lib]
+name = "clanker"
+path = "src/clanker.rs"
+bench = true
