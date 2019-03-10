@@ -28,7 +28,12 @@ mod color;
 mod compress;
 
 use color::Color;
-use std::{env, ffi::CStr, mem};
+
+use std::{
+    env,
+    ffi::{CStr, OsString},
+    mem,
+};
 
 fn main() {
     let cwd = compress::cwd().unwrap_or_else(|_| "?".to_string());
@@ -50,11 +55,11 @@ fn cursors() -> (String, String) {
 
     let cursor = iter
         .next()
-        .map(|c| c.to_string_lossy().into_owned())
+        .map(|c| c.into_string_lossy())
         .unwrap_or_else(|| ">".to_string());
     let root_cursor = iter
         .next()
-        .map(|c| c.to_string_lossy().into_owned())
+        .map(|c| c.into_string_lossy())
         .unwrap_or_else(|| "#".to_string());
 
     (cursor, root_cursor)
@@ -80,4 +85,15 @@ fn hostname() -> String {
     let hostname = unsafe { CStr::from_ptr(utsname.nodename.as_ptr()) };
 
     hostname.to_string_lossy().into_owned()
+}
+
+trait IntoStringLossy {
+    fn into_string_lossy(self) -> String;
+}
+
+impl IntoStringLossy for OsString {
+    fn into_string_lossy(self) -> String {
+        self.into_string()
+            .unwrap_or_else(|s| s.to_string_lossy().into_owned())
+    }
 }
