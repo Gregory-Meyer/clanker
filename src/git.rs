@@ -21,12 +21,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 
-use std::{ffi::CStr, marker::PhantomData, mem, ptr, slice, str};
+use std::{ffi::CStr, marker::PhantomData, mem::MaybeUninit, ptr, slice, str};
 
 use libc::{c_char, c_int, c_void};
 use libgit2_sys::{
-    git_buf, git_commit, git_object, git_oid, git_reference, git_repository, GIT_OBJ_ANY,
-    GIT_OBJ_COMMIT, GIT_REPOSITORY_OPEN_FROM_ENV,
+    git_buf, git_commit, git_object, git_oid, git_reference, git_repository, GIT_OBJECT_ANY,
+    GIT_OBJECT_COMMIT, GIT_REPOSITORY_OPEN_FROM_ENV,
 };
 
 pub struct Repository(*mut git_repository);
@@ -35,7 +35,7 @@ impl Repository {
     pub fn open_from_env() -> Option<Repository> {
         unsafe { libgit2_sys::git_libgit2_init() };
 
-        let mut repo = unsafe { mem::uninitialized() };
+        let mut repo = unsafe { MaybeUninit::uninit().assume_init() };
 
         match unsafe {
             libgit2_sys::git_repository_open_ext(
@@ -51,7 +51,7 @@ impl Repository {
     }
 
     pub fn head(&self) -> Option<Reference> {
-        let mut head = unsafe { mem::uninitialized() };
+        let mut head = unsafe { MaybeUninit::uninit().assume_init() };
 
         match unsafe { libgit2_sys::git_repository_head(&mut head, self.0) } {
             0 => Some(Reference(head, PhantomData)),
@@ -60,9 +60,9 @@ impl Repository {
     }
 
     pub fn lookup_object(&self, oid: Oid) -> Option<Object> {
-        let mut obj = unsafe { mem::uninitialized() };
+        let mut obj = unsafe { MaybeUninit::uninit().assume_init() };
 
-        match unsafe { libgit2_sys::git_object_lookup(&mut obj, self.0, oid.0, GIT_OBJ_ANY) } {
+        match unsafe { libgit2_sys::git_object_lookup(&mut obj, self.0, oid.0, GIT_OBJECT_ANY) } {
             0 => Some(Object(obj, PhantomData)),
             _ => None,
         }
@@ -134,7 +134,7 @@ pub struct Reference<'repo>(*mut git_reference, PhantomData<&'repo Repository>);
 
 impl<'repo> Reference<'repo> {
     pub fn branch_name(&self) -> Option<&CStr> {
-        let mut name = unsafe { mem::uninitialized() };
+        let mut name = unsafe { MaybeUninit::uninit().assume_init() };
 
         match unsafe { libgit2_sys::git_branch_name(&mut name, self.0) } {
             0 => Some(unsafe { CStr::from_ptr(name) }),
@@ -143,9 +143,9 @@ impl<'repo> Reference<'repo> {
     }
 
     pub fn peel_to_commit(&self) -> Option<Commit<'repo>> {
-        let mut commit = unsafe { mem::uninitialized() };
+        let mut commit = unsafe { MaybeUninit::uninit().assume_init() };
 
-        match unsafe { libgit2_sys::git_reference_peel(&mut commit, self.0, GIT_OBJ_COMMIT) } {
+        match unsafe { libgit2_sys::git_reference_peel(&mut commit, self.0, GIT_OBJECT_COMMIT) } {
             0 => Some(Commit(commit as *mut git_commit, PhantomData)),
             _ => None,
         }
@@ -180,9 +180,9 @@ pub struct Object<'repo>(*mut git_object, PhantomData<&'repo Repository>);
 
 impl<'repo> Object<'repo> {
     pub fn peel_to_commit(&self) -> Option<Commit<'repo>> {
-        let mut commit = unsafe { mem::uninitialized() };
+        let mut commit = unsafe { MaybeUninit::uninit().assume_init() };
 
-        match unsafe { libgit2_sys::git_object_peel(&mut commit, self.0, GIT_OBJ_COMMIT) } {
+        match unsafe { libgit2_sys::git_object_peel(&mut commit, self.0, GIT_OBJECT_COMMIT) } {
             0 => Some(Commit(commit as *mut git_commit, PhantomData)),
             _ => None,
         }
@@ -217,7 +217,7 @@ impl Buf {
 
 impl Drop for Buf {
     fn drop(&mut self) {
-        unsafe { libgit2_sys::git_buf_free(&mut self.0) };
+        unsafe { libgit2_sys::git_buf_dispose(&mut self.0) };
     }
 }
 

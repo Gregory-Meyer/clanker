@@ -21,16 +21,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 
-extern crate libc;
-extern crate unicode_segmentation;
-
 mod color;
 mod compress;
 
 use color::Color;
 use compress::IntoStringLossy;
 
-use std::{env, ffi::CStr, mem};
+use std::{env, ffi::CStr, mem::MaybeUninit};
 
 fn main() {
     let cwd = compress::cwd().unwrap_or_else(|_| "?".to_string());
@@ -75,7 +72,7 @@ fn username_and_is_root() -> (String, bool) {
 fn hostname() -> String {
     // less work than utsname - no dynamic alloc for hostname buffer
     // probably
-    let mut utsname: libc::utsname = unsafe { mem::uninitialized() };
+    let mut utsname = unsafe { MaybeUninit::uninit().assume_init() };
     let ret = unsafe { libc::uname(&mut utsname) };
     assert_eq!(ret, 0);
 

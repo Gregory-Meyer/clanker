@@ -4,7 +4,7 @@
 
 Clanker is a theme for fish with a focus on minimalism.
 
-![Clanker demo](demo.png)
+[![clanker demo](https://asciinema.org/a/274780.svg)](https://asciinema.org/a/274780)
 
 ## Installation
 
@@ -17,11 +17,12 @@ Then place this in your `config.fish` or somewhere that will be sourced when
 
 ```fish
 function fish_prompt
+    set -g CLANKER_STATUS $status
     clanker-prompt
 end
 
 function fish_right_prompt
-    clanker-right-prompt "$status"
+    clanker-right-prompt "$CLANKER_STATUS"
 end
 
 function fish_title
@@ -44,33 +45,33 @@ your `PATH`, like `/usr/local/bin`.
 
 ### `clanker-prompt`
 
-`clanker-prompt` optionally takes up to two arguments and outputs the current
-username, hostname, and compressed directory. Compression of the current
-working directory is as expected - if in the current user's home directory, the
-prefix is substituted with `~`. If in another user's home directory, the prefix
-is substituted with `~USER`. If there is more than one component in the path,
-all components but the last are trimmed to one or two extended grapheme
-clusters. Components are trimmed to two extended grapheme clusters if 1. they
-begin with a `.` or 2. they begin with a `~` and also are the first component
-in the path - in other words, the result of prefix shortening to
-`~USER/other/path/components`.
-
-The two optional arguments are the unpriviliged cursor and priviliged cursor,
-respectively. These default to `>` and `#` but you replace them at runtime
-using these arguments.
+`clanker-prompt` outputs the current username, hostname, and compressed current
+working directory. There are two optional arguments -- the unpriviliged and
+priviliged line enders. These default to `'>'` and `'#'`, respectively, but you may
+replace them at runtime using these arguments.
 
 ### `clanker-right-prompt`
 
-`clanker-right-prompt` optionally takes the status of the last command as an
-argument. If the status was provided and was nonzero, it is printed in red. In
-addition, if the current directory is a git repository according to the
-behavior when running `git_repository_open_ext` with
-`REPOSITORY_OPEN_FROM_ENV`, this will indicate either the current branch HEAD
-points to, the current tag(s) that point to the same commit HEAD does, or the
-short 7-digit SHA sum of the checked-out commit. If more than one tag points
-to the same commit as HEAD, they will be delimited by a '\' (backslash).
+`clanker-right-prompt` prints the status of the last command in red if it was
+nonzero and some info the git repository the current folder is in. If the
+current directory is a git repository according to `git_repository_open_ext(..., REPOSITORY_OPEN_FROM_ENV, ...)`, this program will print out some info about
+`HEAD`. If `HEAD` points to a branch, the name of that branch will be printed.
+If `HEAD` points to a tagged commit, the name of those tags will be printed. If
+multiple tags point to the same commit as `HEAD`, then the tags are delimited
+with a backslash (`'\'`). Otherwise, the shortened 7-digit SHA sum of the
+current commit will be output.
 
 ### `clanker-title`
 
 `clanker-title` optionally takes the currently running program as an argument
 and prints it along with the compressed current working directory.
+
+## Path Compression
+
+Paths are compressed so that each compressed component is the shortest unique
+prefix of a filename in that path. A component will never be shortened to `"."`
+or `".."`. The last component in a path is never shortened. Components that do
+not represent a unique prefix at all are not compressed. Home directories of
+another user, like `~gregjm` or `~root`, are not compressed.
+
+
