@@ -28,6 +28,8 @@ use std::{
     path::PathBuf,
 };
 
+mod gct;
+
 use unicode_segmentation::UnicodeSegmentation;
 
 pub trait IntoStringLossy {
