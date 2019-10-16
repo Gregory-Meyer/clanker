@@ -17,11 +17,12 @@ Then place this in your `config.fish` or somewhere that will be sourced when
 
 ```fish
 function fish_prompt
+    set -g CLANKER_STATUS $status
     clanker-prompt
 end
 
 function fish_right_prompt
-    clanker-right-prompt "$status"
+    clanker-right-prompt "$CLANKER_STATUS"
 end
 
 function fish_title
