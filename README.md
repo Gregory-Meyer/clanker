@@ -4,7 +4,7 @@
 
 Clanker is a theme for fish with a focus on minimalism.
 
-![Clanker demo](demo.png)
+[![clanker demo](https://asciinema.org/a/274780.svg)](https://asciinema.org/a/274780)
 
 ## Installation
 
