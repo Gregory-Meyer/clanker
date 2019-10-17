@@ -142,6 +142,8 @@ fn compress(path: &Path) -> io::Result<String> {
 
         compressed.push('/');
         compressed.push_str(last.as_os_str().to_string_lossy().borrow());
+    } else if compressed.is_empty() {
+        compressed.push('/');
     }
 
     Ok(compressed)
