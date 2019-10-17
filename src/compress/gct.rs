@@ -22,7 +22,6 @@
 // IN THE SOFTWARE.
 
 use std::{
-    borrow::Borrow,
     collections::HashMap,
     iter::{FromIterator, IntoIterator},
 };
@@ -53,12 +52,18 @@ impl<'a> GraphemeClusterTrie<'a> {
     }
 }
 
-impl<'a, S: Borrow<&'a str>> FromIterator<S> for GraphemeClusterTrie<'a> {
-    fn from_iter<I: IntoIterator<Item = S>>(iter: I) -> GraphemeClusterTrie<'a> {
+impl<'a> FromIterator<&'a str> for GraphemeClusterTrie<'a> {
+    fn from_iter<I: IntoIterator<Item = &'a str>>(iter: I) -> GraphemeClusterTrie<'a> {
         let mut root = Node::new();
 
-        for s in iter {
-            root.insert(s.borrow());
+        for mut s in iter {
+            let mut current = &mut root;
+
+            for cluster in s.graphemes(true) {
+                current = current.children.entry(cluster).or_insert_with(Node::new);
+
+                s = &s[cluster.len()..];
+            }
         }
 
         GraphemeClusterTrie { root }
@@ -75,20 +80,6 @@ impl<'a> Node<'a> {
             children: HashMap::new(),
         }
     }
-
-    fn insert(&mut self, s: &'a str) {
-        let grapheme = match s.graphemes(true).next() {
-            None => return,
-            Some(g) => g,
-        };
-
-        let without_grapheme = &s[grapheme.len()..];
-
-        self.children
-            .entry(grapheme)
-            .or_insert_with(Node::new)
-            .insert(without_grapheme);
-    }
 }
 
 #[cfg(test)]
@@ -97,8 +88,7 @@ mod tests {
 
     #[test]
     fn basic() {
-        let strings = &["aa", "ab", "ac"];
-        let trie: GraphemeClusterTrie = strings.iter().collect();
+        let trie: GraphemeClusterTrie = ["aa", "ab", "ac"].into_iter().map(|&s| s).collect();
 
         assert_eq!(trie.shortest_unique_prefix("ad"), Some("ad"));
         assert_eq!(trie.shortest_unique_prefix("b"), Some("b"));
@@ -108,7 +98,7 @@ mod tests {
 
     #[test]
     fn realworld() {
-        let strings = &[
+        let trie: GraphemeClusterTrie = [
             "a1",
             "c",
             // "c++",
@@ -127,8 +117,10 @@ mod tests {
             // "rust",
             "Templates",
             "Videos",
-        ];
-        let trie: GraphemeClusterTrie = strings.iter().collect();
+        ]
+        .into_iter()
+        .map(|&s| s)
+        .collect();
 
         assert_eq!(trie.shortest_unique_prefix("c++"), Some("c+"));
         assert_eq!(trie.shortest_unique_prefix("rust"), Some("ru"));
