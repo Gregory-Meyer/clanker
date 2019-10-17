@@ -59,20 +59,11 @@ fn make_prompt() -> String {
     }
 }
 
-macro_rules! try_option {
-    ($x:expr) => {
-        match $x {
-            Some(x) => x,
-            None => return None,
-        }
-    };
-}
-
 fn repo_head() -> Option<String> {
     let is_dirty_thread = thread::spawn(repository_is_dirty);
 
-    let repo = try_option!(Repository::open_from_env());
-    let identifier = try_option!(identify_head(&repo));
+    let repo = Repository::open_from_env()?;
+    let identifier = identify_head(&repo)?;
 
     if is_dirty_thread.join().ok().unwrap_or(false) {
         Some(format!("{} *", identifier))
@@ -82,12 +73,12 @@ fn repo_head() -> Option<String> {
 }
 
 fn identify_head(repo: &Repository) -> Option<String> {
-    let head = try_option!(repo.head());
+    let head = repo.head()?;
 
     if let Some(name) = head.branch_name() {
         Some(name.to_string_lossy().into_owned())
     } else {
-        let head_commit = try_option!(head.peel_to_commit()); // this had better point to a commit...
+        let head_commit = head.peel_to_commit()?; // this had better point to a commit...
         let tags = repo
             .tags_pointing_to(&head_commit)
             .unwrap_or_else(|| Vec::new());
