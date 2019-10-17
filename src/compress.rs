@@ -25,6 +25,7 @@ use std::{
     borrow::Borrow,
     cmp, env,
     ffi::{CStr, OsStr, OsString},
+    fs::{self, Metadata},
     io::{self, ErrorKind},
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
@@ -103,7 +104,13 @@ fn compress(path: &Path) -> io::Result<String> {
                     continue;
                 }
 
-                filenames.push(filename.into_string_lossy());
+                if fs::metadata(&entry.path())
+                    .as_ref()
+                    .map(Metadata::is_dir)
+                    .unwrap_or(true)
+                {
+                    filenames.push(filename.into_string_lossy());
+                }
             }
 
             let trie: GraphemeClusterTrie = filenames.iter().map(|s| s.as_str()).collect();
