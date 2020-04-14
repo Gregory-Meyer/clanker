@@ -119,7 +119,7 @@ fn compress(path: &Path) -> io::Result<String> {
 
             if let Some(mut prefix) = trie.shortest_unique_prefix(component_str) {
                 // avoid compressing ".a" to "." or "..a" to "."/".."
-                if prefix.starts_with(".") {
+                if prefix.starts_with('.') {
                     const MIN_DISAMBUGABLE_LEN: usize = 3;
 
                     let search_len = cmp::min(component_str.len(), MIN_DISAMBUGABLE_LEN);
@@ -169,31 +169,71 @@ fn without_prefix(path: &Path) -> io::Result<(&Path, PathBuf, String)> {
         }
     }
 
-    loop {
-        let passwd_ptr = match NonNull::new(unsafe { libc::getpwent() }) {
-            Some(p) => p,
-            None => break,
-        };
+    let default_prefixed = |mut buf: PathBuf, compressed: String| {
+        path.strip_prefix(OsStr::from_bytes(b"/").as_ref() as &Path)
+            .map(move |p| {
+                buf.push("/");
 
-        let username = unsafe { CStr::from_ptr(passwd_ptr.as_ref().pw_name) };
-        let this_home_dir: &Path = unsafe {
-            OsStr::from_bytes(CStr::from_ptr(passwd_ptr.as_ref().pw_dir).to_bytes()).as_ref()
-        };
+                (p, buf, compressed)
+            })
+            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
+    };
 
-        if let Ok(without_prefix) = path.strip_prefix(this_home_dir) {
-            buf.push(this_home_dir);
+    let passwd_contents = if let Ok(contents) = fs::read("/etc/passwd") {
+        contents
+    } else {
+        return default_prefixed(buf, compressed);
+    };
+
+    let mut username_homedirs: Vec<_> = passwd_contents
+        .split(|&elem| elem == b'\n')
+        .filter_map(|line| {
+            if line.is_empty() {
+                return None;
+            }
+
+            let mut fields = line.split(|&elem| elem == b':');
+            let username = fields.next()?;
+
+            let mut fields = fields.skip(4); // skip password, UID, GID, and GECOS
+            let home_dir_bytes = fields.next()?;
+
+            if fields.count() != 1 {
+                // should be only shell remaining
+                return None;
+            }
+
+            let home_dir = fs::canonicalize(OsStr::from_bytes(home_dir_bytes)).ok()?;
+
+            Some((username, home_dir))
+        })
+        .collect();
+
+    // descending home directory length. tied lengths sort usernames in ascending order
+    // i asssume that each username maps to one user, but it's possible for this assumption to break
+    // we could also use UIDs, but I prefer to use the usernames
+    username_homedirs.sort_unstable_by(
+        |(left_username, left_home_dir), (right_username, right_home_dir)| {
+            let left_home_dir_len = left_home_dir.as_os_str().len();
+            let right_home_dir_len = right_home_dir.as_os_str().len();
+
+            if left_home_dir_len == right_home_dir_len {
+                left_username.cmp(right_username)
+            } else {
+                left_home_dir_len.cmp(&right_home_dir_len).reverse()
+            }
+        },
+    );
+
+    for (username, home_dir) in username_homedirs.iter() {
+        if let Ok(without_prefix) = path.strip_prefix(home_dir) {
+            buf.push(home_dir);
             compressed.push('~');
-            compressed.push_str(username.to_string_lossy().borrow());
+            compressed.push_str(String::from_utf8_lossy(username).borrow());
 
             return Ok((without_prefix, buf, compressed));
         }
     }
 
-    path.strip_prefix(OsStr::from_bytes(b"/").as_ref() as &Path)
-        .map(move |p| {
-            buf.push("/");
-
-            (p, buf, compressed)
-        })
-        .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
+    default_prefixed(buf, compressed)
 }
