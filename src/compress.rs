@@ -174,7 +174,7 @@ fn without_prefix(path: &Path) -> io::Result<(&Path, PathBuf, String)> {
         return default_prefixed();
     };
 
-    let mut without_prefix_home_dir_and_username: Vec<_> = passwd_contents
+    let without_prefix_home_dir_and_username: Vec<_> = passwd_contents
         .split(|&elem| elem == b'\n')
         .filter_map(|line| {
             if line.is_empty() {
@@ -199,21 +199,14 @@ fn without_prefix(path: &Path) -> io::Result<(&Path, PathBuf, String)> {
         })
         .collect();
 
-    // descending home directory length. tied lengths sort usernames in ascending order
-    // i asssume that each username maps to one user, but it's possible for this assumption to break
-    // we could also use UIDs, but I prefer to use the usernames
-    without_prefix_home_dir_and_username.sort_unstable_by(
-        |(left_without_prefix, _, left_username), (right_without_prefix, _, right_username)| {
-            let left_without_prefix_len = left_without_prefix.as_os_str().len();
-            let right_without_prefix_len = right_without_prefix.as_os_str().len();
+    // remove the longest possible prefix. break ties by lexicographically comparing usernames
+    if let Some((without_prefix, home_dir, username_bytes)) = without_prefix_home_dir_and_username
+        .into_iter()
+        .min_by_key(|&(without_prefix, _, username)| {
+            let without_prefix_len = without_prefix.as_os_str().len();
 
-            (left_without_prefix_len, left_username)
-                .cmp(&(right_without_prefix_len, right_username))
-        },
-    );
-
-    if let Some((without_prefix, home_dir, username_bytes)) =
-        without_prefix_home_dir_and_username.into_iter().next()
+            (without_prefix_len, username)
+        })
     {
         let username = String::from_utf8_lossy(username_bytes);
 
