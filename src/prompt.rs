@@ -25,9 +25,8 @@ mod color;
 mod compress;
 
 use color::Color;
-use compress::IntoStringLossy;
 
-use std::{env, ffi::CStr, fmt::Display, mem::MaybeUninit};
+use std::{env, ffi::CStr, mem::MaybeUninit};
 
 fn main() {
     let args: Vec<_> = env::args().collect();
