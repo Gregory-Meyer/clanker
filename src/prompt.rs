@@ -27,34 +27,43 @@ mod compress;
 use color::Color;
 use compress::IntoStringLossy;
 
-use std::{env, ffi::CStr, mem::MaybeUninit};
+use std::{env, ffi::CStr, fmt::Display, mem::MaybeUninit};
 
 fn main() {
-    let cwd = compress::cwd().unwrap_or_else(|_| "?".to_string());
+    let args: Vec<_> = env::args().collect();
+    let min_home_dir_uid = args
+        .get(1)
+        .and_then(|maybe_min_home_dir_uid| maybe_min_home_dir_uid.parse().ok())
+        .unwrap_or(0);
+    let cwd = compress::cwd(min_home_dir_uid).unwrap_or_else(|_| "?".to_string());
 
-    let (cursor, root_cursor) = cursors();
+    let (unpriviliged_cursor, priviliged_cursor) = cursors(args);
     let (username, is_root) = username_and_is_root();
 
     if is_root {
-        print!("{}@{} {}{} ", username, hostname(), cwd.red(), root_cursor)
+        print!(
+            "{}@{} {}{} ",
+            username,
+            hostname(),
+            cwd.red(),
+            priviliged_cursor
+        );
     } else {
-        print!("{}@{} {}{} ", username, hostname(), cwd.green(), cursor)
+        print!(
+            "{}@{} {}{} ",
+            username,
+            hostname(),
+            cwd.green(),
+            unpriviliged_cursor
+        );
     }
 }
 
-fn cursors() -> (String, String) {
-    let mut iter = env::args_os();
+fn cursors(args: Vec<String>) -> (String, String) {
+    let mut iter = args.into_iter().skip(2);
 
-    iter.next(); // skip first arg, the exec name
-
-    let cursor = iter
-        .next()
-        .map(|c| c.into_string_lossy())
-        .unwrap_or_else(|| ">".to_string());
-    let root_cursor = iter
-        .next()
-        .map(|c| c.into_string_lossy())
-        .unwrap_or_else(|| "#".to_string());
+    let cursor = iter.next().unwrap_or_else(|| ">".to_string());
+    let root_cursor = iter.next().unwrap_or_else(|| "#".to_string());
 
     (cursor, root_cursor)
 }

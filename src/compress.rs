@@ -29,6 +29,7 @@ use std::{
     io::{self, ErrorKind},
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
+    str,
 };
 
 mod gct;
@@ -52,8 +53,8 @@ impl IntoStringLossy for PathBuf {
     }
 }
 
-pub fn cwd() -> io::Result<String> {
-    current_dir().and_then(|d| compress(&d))
+pub fn cwd(min_home_dir_uid: u64) -> io::Result<String> {
+    current_dir().and_then(|d| compress(&d, min_home_dir_uid))
 }
 
 fn current_dir() -> io::Result<PathBuf> {
@@ -64,8 +65,8 @@ fn current_dir() -> io::Result<PathBuf> {
     }
 }
 
-fn compress(path: &Path) -> io::Result<String> {
-    let (without_prefix, mut buf, mut compressed) = without_prefix(path)?;
+fn compress(path: &Path, min_home_dir_uid: u64) -> io::Result<String> {
+    let (without_prefix, mut buf, mut compressed) = without_prefix(path, min_home_dir_uid)?;
 
     let mut components: Vec<_> = without_prefix.components().collect();
 
@@ -155,7 +156,7 @@ fn compress(path: &Path) -> io::Result<String> {
     Ok(compressed)
 }
 
-fn without_prefix(path: &Path) -> io::Result<(&Path, PathBuf, String)> {
+fn without_prefix(path: &Path, min_home_dir_uid: u64) -> io::Result<(&Path, PathBuf, String)> {
     if let Some(home_dir) = dirs::home_dir() {
         if let Ok(without_prefix) = path.strip_prefix(&home_dir) {
             return Ok((without_prefix, home_dir, "~".to_string()));
@@ -184,7 +185,14 @@ fn without_prefix(path: &Path) -> io::Result<(&Path, PathBuf, String)> {
             let mut fields = line.split(|&elem| elem == b':');
             let username = fields.next()?;
 
-            let mut fields = fields.skip(4); // skip password, UID, GID, and GECOS
+            let mut fields = fields.skip(1); // skip password
+            let uid: u64 = str::from_utf8(fields.next()?).ok()?.parse().ok()?;
+
+            if uid < min_home_dir_uid {
+                return None;
+            }
+
+            let mut fields = fields.skip(2); // skip GID and GECOS
             let home_dir_bytes = fields.next()?;
 
             if fields.count() != 1 {

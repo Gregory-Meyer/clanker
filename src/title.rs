@@ -27,7 +27,11 @@ use std::env;
 
 fn main() {
     let args: Vec<_> = env::args().collect();
-    let cwd = compress::cwd().unwrap_or_else(|_| "?".to_string());
+    let min_home_dir_uid = args
+        .get(2)
+        .and_then(|maybe_min_home_dir_uid| maybe_min_home_dir_uid.parse().ok())
+        .unwrap_or(0);
+    let cwd = compress::cwd(min_home_dir_uid).unwrap_or_else(|_| "?".to_string());
 
     if let Some(running) = args.get(1) {
         print!("{} {}", running, cwd)
