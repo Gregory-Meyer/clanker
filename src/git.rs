@@ -1,25 +1,17 @@
-// MIT License
+// Copyright (C) 2020 Gregory Meyer
 //
-// Copyright (c) 2019 Gregory Meyer
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to
-// deal in the Software without restriction, including without limitation the
-// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
-// sell copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// The above copyright notice and this permission notice (including the next
-// paragraph) shall be included in all copies or substantial portions of the
-// Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-// IN THE SOFTWARE.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::{ffi::CStr, marker::PhantomData, mem::MaybeUninit, ptr, slice, str};
 
@@ -35,35 +27,37 @@ impl Repository {
     pub fn open_from_env() -> Option<Repository> {
         unsafe { libgit2_sys::git_libgit2_init() };
 
-        let mut repo = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut repo = MaybeUninit::uninit();
 
         match unsafe {
             libgit2_sys::git_repository_open_ext(
-                &mut repo,
+                &mut *repo.as_mut_ptr(),
                 ptr::null(),
                 GIT_REPOSITORY_OPEN_FROM_ENV,
                 ptr::null(),
             )
         } {
-            0 => Some(Repository(repo)),
+            0 => Some(Repository(unsafe { repo.assume_init() })),
             _ => None,
         }
     }
 
     pub fn head(&self) -> Option<Reference> {
-        let mut head = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut head = MaybeUninit::uninit();
 
-        match unsafe { libgit2_sys::git_repository_head(&mut head, self.0) } {
-            0 => Some(Reference(head, PhantomData)),
+        match unsafe { libgit2_sys::git_repository_head(&mut *head.as_mut_ptr(), self.0) } {
+            0 => Some(Reference(unsafe { head.assume_init() }, PhantomData)),
             _ => None,
         }
     }
 
     pub fn lookup_object(&self, oid: Oid) -> Option<Object> {
-        let mut obj = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut obj = MaybeUninit::uninit();
 
-        match unsafe { libgit2_sys::git_object_lookup(&mut obj, self.0, oid.0, GIT_OBJECT_ANY) } {
-            0 => Some(Object(obj, PhantomData)),
+        match unsafe {
+            libgit2_sys::git_object_lookup(&mut *obj.as_mut_ptr(), self.0, oid.0, GIT_OBJECT_ANY)
+        } {
+            0 => Some(Object(unsafe { obj.assume_init() }, PhantomData)),
             _ => None,
         }
     }
@@ -78,8 +72,9 @@ impl<'a> Repository {
         };
         let payload_ptr = &mut payload as *mut _ as *mut c_void;
 
-        if unsafe { libgit2_sys::git_tag_foreach(self.0, Repository::tag_cb_entry, payload_ptr) }
-            != 0
+        if unsafe {
+            libgit2_sys::git_tag_foreach(self.0, Some(Repository::tag_cb_entry), payload_ptr)
+        } != 0
         {
             None
         } else {
@@ -134,19 +129,24 @@ pub struct Reference<'repo>(*mut git_reference, PhantomData<&'repo Repository>);
 
 impl<'repo> Reference<'repo> {
     pub fn branch_name(&self) -> Option<&CStr> {
-        let mut name = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut name = MaybeUninit::uninit();
 
-        match unsafe { libgit2_sys::git_branch_name(&mut name, self.0) } {
-            0 => Some(unsafe { CStr::from_ptr(name) }),
+        match unsafe { libgit2_sys::git_branch_name(&mut *name.as_mut_ptr(), self.0) } {
+            0 => Some(unsafe { CStr::from_ptr(name.assume_init()) }),
             _ => None,
         }
     }
 
     pub fn peel_to_commit(&self) -> Option<Commit<'repo>> {
-        let mut commit = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut commit = MaybeUninit::uninit();
 
-        match unsafe { libgit2_sys::git_reference_peel(&mut commit, self.0, GIT_OBJECT_COMMIT) } {
-            0 => Some(Commit(commit as *mut git_commit, PhantomData)),
+        match unsafe {
+            libgit2_sys::git_reference_peel(&mut *commit.as_mut_ptr(), self.0, GIT_OBJECT_COMMIT)
+        } {
+            0 => Some(Commit(
+                unsafe { commit.assume_init() } as *mut git_commit,
+                PhantomData,
+            )),
             _ => None,
         }
     }
@@ -180,10 +180,15 @@ pub struct Object<'repo>(*mut git_object, PhantomData<&'repo Repository>);
 
 impl<'repo> Object<'repo> {
     pub fn peel_to_commit(&self) -> Option<Commit<'repo>> {
-        let mut commit = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut commit = MaybeUninit::uninit();
 
-        match unsafe { libgit2_sys::git_object_peel(&mut commit, self.0, GIT_OBJECT_COMMIT) } {
-            0 => Some(Commit(commit as *mut git_commit, PhantomData)),
+        match unsafe {
+            libgit2_sys::git_object_peel(&mut *commit.as_mut_ptr(), self.0, GIT_OBJECT_COMMIT)
+        } {
+            0 => Some(Commit(
+                unsafe { commit.assume_init() } as *mut git_commit,
+                PhantomData,
+            )),
             _ => None,
         }
     }
