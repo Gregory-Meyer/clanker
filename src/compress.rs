@@ -23,13 +23,13 @@
 
 use std::{
     borrow::Borrow,
-    cmp, env,
-    ffi::{CStr, OsStr, OsString},
+    cmp,
+    ffi::{OsStr, OsString},
     fs::{self, Metadata},
     io::{self, ErrorKind},
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
-    ptr::NonNull,
+    str,
 };
 
 mod gct;
@@ -53,20 +53,8 @@ impl IntoStringLossy for PathBuf {
     }
 }
 
-pub fn cwd() -> io::Result<String> {
-    current_dir().and_then(|d| compress(&d))
-}
-
-fn current_dir() -> io::Result<PathBuf> {
-    if let Some(path) = env::var_os("PWD") {
-        Ok(PathBuf::from(path))
-    } else {
-        env::current_dir()
-    }
-}
-
-fn compress(path: &Path) -> io::Result<String> {
-    let (without_prefix, mut buf, mut compressed) = without_prefix(path)?;
+pub fn compress(path: &Path, min_home_dir_uid: u64) -> io::Result<String> {
+    let (without_prefix, mut buf, mut compressed) = without_prefix(path, min_home_dir_uid)?;
 
     let mut components: Vec<_> = without_prefix.components().collect();
 
@@ -119,7 +107,7 @@ fn compress(path: &Path) -> io::Result<String> {
 
             if let Some(mut prefix) = trie.shortest_unique_prefix(component_str) {
                 // avoid compressing ".a" to "." or "..a" to "."/".."
-                if prefix.starts_with(".") {
+                if prefix.starts_with('.') {
                     const MIN_DISAMBUGABLE_LEN: usize = 3;
 
                     let search_len = cmp::min(component_str.len(), MIN_DISAMBUGABLE_LEN);
@@ -156,44 +144,70 @@ fn compress(path: &Path) -> io::Result<String> {
     Ok(compressed)
 }
 
-fn without_prefix(path: &Path) -> io::Result<(&Path, PathBuf, String)> {
-    let mut buf: PathBuf = OsString::with_capacity(path.as_os_str().len()).into();
-    let mut compressed = String::with_capacity(path.as_os_str().len());
-
+fn without_prefix(path: &Path, min_home_dir_uid: u64) -> io::Result<(&Path, PathBuf, String)> {
     if let Some(home_dir) = dirs::home_dir() {
         if let Ok(without_prefix) = path.strip_prefix(&home_dir) {
-            buf.push(home_dir);
-            compressed.push('~');
-
-            return Ok((without_prefix, buf, compressed));
+            return Ok((without_prefix, home_dir, "~".to_string()));
         }
     }
 
-    loop {
-        let passwd_ptr = match NonNull::new(unsafe { libc::getpwent() }) {
-            Some(p) => p,
-            None => break,
-        };
+    let default_prefixed = || {
+        path.strip_prefix(OsStr::from_bytes(b"/").as_ref() as &Path)
+            .map(move |p| (p, "/".into(), String::new()))
+            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
+    };
 
-        let username = unsafe { CStr::from_ptr(passwd_ptr.as_ref().pw_name) };
-        let this_home_dir: &Path = unsafe {
-            OsStr::from_bytes(CStr::from_ptr(passwd_ptr.as_ref().pw_dir).to_bytes()).as_ref()
-        };
+    let passwd_contents = if let Ok(contents) = fs::read("/etc/passwd") {
+        contents
+    } else {
+        return default_prefixed();
+    };
 
-        if let Ok(without_prefix) = path.strip_prefix(this_home_dir) {
-            buf.push(this_home_dir);
-            compressed.push('~');
-            compressed.push_str(username.to_string_lossy().borrow());
+    let without_prefix_home_dir_and_username: Vec<_> = passwd_contents
+        .split(|&elem| elem == b'\n')
+        .filter_map(|line| {
+            if line.is_empty() {
+                return None;
+            }
 
-            return Ok((without_prefix, buf, compressed));
-        }
-    }
+            let mut fields = line.split(|&elem| elem == b':');
+            let username = fields.next()?;
 
-    path.strip_prefix(OsStr::from_bytes(b"/").as_ref() as &Path)
-        .map(move |p| {
-            buf.push("/");
+            let mut fields = fields.skip(1); // skip password
+            let uid: u64 = str::from_utf8(fields.next()?).ok()?.parse().ok()?;
 
-            (p, buf, compressed)
+            if uid < min_home_dir_uid {
+                return None;
+            }
+
+            let mut fields = fields.skip(2); // skip GID and GECOS
+            let home_dir_bytes = fields.next()?;
+
+            if fields.count() != 1 {
+                // should be only shell remaining
+                return None;
+            }
+
+            let home_dir = fs::canonicalize(OsStr::from_bytes(home_dir_bytes)).ok()?;
+            let without_prefix = path.strip_prefix(&home_dir).ok()?;
+
+            Some((without_prefix, home_dir, username))
         })
-        .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
+        .collect();
+
+    // remove the longest possible prefix. break ties by lexicographically comparing usernames
+    if let Some((without_prefix, home_dir, username_bytes)) = without_prefix_home_dir_and_username
+        .into_iter()
+        .min_by_key(|&(without_prefix, _, username)| {
+            let without_prefix_len = without_prefix.as_os_str().len();
+
+            (without_prefix_len, username)
+        })
+    {
+        let username = String::from_utf8_lossy(username_bytes);
+
+        Ok((without_prefix, home_dir, format!("~{}", username)))
+    } else {
+        default_prefixed()
+    }
 }

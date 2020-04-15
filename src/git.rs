@@ -35,35 +35,37 @@ impl Repository {
     pub fn open_from_env() -> Option<Repository> {
         unsafe { libgit2_sys::git_libgit2_init() };
 
-        let mut repo = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut repo = MaybeUninit::uninit();
 
         match unsafe {
             libgit2_sys::git_repository_open_ext(
-                &mut repo,
+                &mut *repo.as_mut_ptr(),
                 ptr::null(),
                 GIT_REPOSITORY_OPEN_FROM_ENV,
                 ptr::null(),
             )
         } {
-            0 => Some(Repository(repo)),
+            0 => Some(Repository(unsafe { repo.assume_init() })),
             _ => None,
         }
     }
 
     pub fn head(&self) -> Option<Reference> {
-        let mut head = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut head = MaybeUninit::uninit();
 
-        match unsafe { libgit2_sys::git_repository_head(&mut head, self.0) } {
-            0 => Some(Reference(head, PhantomData)),
+        match unsafe { libgit2_sys::git_repository_head(&mut *head.as_mut_ptr(), self.0) } {
+            0 => Some(Reference(unsafe { head.assume_init() }, PhantomData)),
             _ => None,
         }
     }
 
     pub fn lookup_object(&self, oid: Oid) -> Option<Object> {
-        let mut obj = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut obj = MaybeUninit::uninit();
 
-        match unsafe { libgit2_sys::git_object_lookup(&mut obj, self.0, oid.0, GIT_OBJECT_ANY) } {
-            0 => Some(Object(obj, PhantomData)),
+        match unsafe {
+            libgit2_sys::git_object_lookup(&mut *obj.as_mut_ptr(), self.0, oid.0, GIT_OBJECT_ANY)
+        } {
+            0 => Some(Object(unsafe { obj.assume_init() }, PhantomData)),
             _ => None,
         }
     }
@@ -78,8 +80,9 @@ impl<'a> Repository {
         };
         let payload_ptr = &mut payload as *mut _ as *mut c_void;
 
-        if unsafe { libgit2_sys::git_tag_foreach(self.0, Repository::tag_cb_entry, payload_ptr) }
-            != 0
+        if unsafe {
+            libgit2_sys::git_tag_foreach(self.0, Some(Repository::tag_cb_entry), payload_ptr)
+        } != 0
         {
             None
         } else {
@@ -134,19 +137,24 @@ pub struct Reference<'repo>(*mut git_reference, PhantomData<&'repo Repository>);
 
 impl<'repo> Reference<'repo> {
     pub fn branch_name(&self) -> Option<&CStr> {
-        let mut name = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut name = MaybeUninit::uninit();
 
-        match unsafe { libgit2_sys::git_branch_name(&mut name, self.0) } {
-            0 => Some(unsafe { CStr::from_ptr(name) }),
+        match unsafe { libgit2_sys::git_branch_name(&mut *name.as_mut_ptr(), self.0) } {
+            0 => Some(unsafe { CStr::from_ptr(name.assume_init()) }),
             _ => None,
         }
     }
 
     pub fn peel_to_commit(&self) -> Option<Commit<'repo>> {
-        let mut commit = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut commit = MaybeUninit::uninit();
 
-        match unsafe { libgit2_sys::git_reference_peel(&mut commit, self.0, GIT_OBJECT_COMMIT) } {
-            0 => Some(Commit(commit as *mut git_commit, PhantomData)),
+        match unsafe {
+            libgit2_sys::git_reference_peel(&mut *commit.as_mut_ptr(), self.0, GIT_OBJECT_COMMIT)
+        } {
+            0 => Some(Commit(
+                unsafe { commit.assume_init() } as *mut git_commit,
+                PhantomData,
+            )),
             _ => None,
         }
     }
@@ -180,10 +188,15 @@ pub struct Object<'repo>(*mut git_object, PhantomData<&'repo Repository>);
 
 impl<'repo> Object<'repo> {
     pub fn peel_to_commit(&self) -> Option<Commit<'repo>> {
-        let mut commit = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut commit = MaybeUninit::uninit();
 
-        match unsafe { libgit2_sys::git_object_peel(&mut commit, self.0, GIT_OBJECT_COMMIT) } {
-            0 => Some(Commit(commit as *mut git_commit, PhantomData)),
+        match unsafe {
+            libgit2_sys::git_object_peel(&mut *commit.as_mut_ptr(), self.0, GIT_OBJECT_COMMIT)
+        } {
+            0 => Some(Commit(
+                unsafe { commit.assume_init() } as *mut git_commit,
+                PhantomData,
+            )),
             _ => None,
         }
     }

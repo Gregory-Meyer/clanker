@@ -33,7 +33,7 @@ pub trait Color: Display {
     }
 }
 
-impl Color for String {}
+impl<T: Display> Color for T {}
 
 pub struct Red<'a, T: Display + ?Sized> {
     t: &'a T,
