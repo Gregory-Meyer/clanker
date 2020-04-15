@@ -23,7 +23,7 @@
 
 use std::{
     borrow::Borrow,
-    cmp, env,
+    cmp,
     ffi::{OsStr, OsString},
     fs::{self, Metadata},
     io::{self, ErrorKind},
