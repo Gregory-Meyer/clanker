@@ -38,7 +38,7 @@ fn main() {
             "Minimum UID for home directory prefix compression. A home directory prefix will \
                only be stripped if that user's UID is greater than or equal to this value.",
         )
-        .default_value("0")
+        .default_value("1000")
         .validator(|maybe_min_home_dir_uid| {
             if maybe_min_home_dir_uid.parse::<u64>().is_err() {
                 Err("expected an integer".to_string())
