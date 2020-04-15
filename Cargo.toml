@@ -25,8 +25,3 @@ path = "src/right_prompt.rs"
 [[bin]]
 name = "clanker-title"
 path = "src/title.rs"
-
-[lib]
-name = "clanker"
-path = "src/clanker.rs"
-bench = true
