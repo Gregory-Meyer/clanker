@@ -68,7 +68,7 @@ fn main() {
         .short("w")
         .long("working-directory")
         .value_name("DIRECTORY")
-        .help("Path to use as the current working directory.")
+        .help("Path to use as the current working directory")
         .env("PWD");
 
     let matches = app_from_crate!()
@@ -76,13 +76,13 @@ fn main() {
         .setting(AppSettings::SubcommandRequired)
         .subcommand(
             SubCommand::with_name("prompt")
-                .about("Left side command prompt.")
+                .about("Left side command prompt")
                 .arg(
                     Arg::with_name("unpriviliged_cursor")
                         .short("u")
                         .long("unpriviliged-cursor")
                         .value_name("CURSOR")
-                        .help("Cursor used when the current user is unpriviliged.")
+                        .help("Cursor used when the current user is unpriviliged")
                         .default_value(">"),
                 )
                 .arg(
@@ -90,14 +90,14 @@ fn main() {
                         .short("p")
                         .long("priviliged-cursor")
                         .value_name("CURSOR")
-                        .help("Cursor used when the current user is priviliged.")
+                        .help("Cursor used when the current user is priviliged")
                         .default_value("#"),
                 )
                 .arg(
                     Arg::with_name("no_username_hostname")
                         .short("S")
                         .long("no-username-hostname")
-                        .help("If set, the current username and hostname will not be output."),
+                        .help("If set, the current username and hostname will not be output"),
                 )
                 .arg(min_home_dir_uid_arg.clone())
                 .arg(max_home_dir_uid_arg.clone())
@@ -105,13 +105,13 @@ fn main() {
         )
         .subcommand(
             SubCommand::with_name("right-prompt")
-                .about("Right side command prompt.")
+                .about("Right side command prompt")
                 .arg(
                     Arg::with_name("return_code")
                         .short("r")
                         .long("return-code")
                         .value_name("CODE")
-                        .help("Return code from the last run command.")
+                        .help("Return code from the last run command")
                         .default_value("0")
                         .validator(|maybe_return_code| {
                             if maybe_return_code.parse::<i32>().is_err() {
@@ -124,13 +124,13 @@ fn main() {
         )
         .subcommand(
             SubCommand::with_name("title")
-                .about("Window title for terminal emulators.")
+                .about("Window title for terminal emulators")
                 .arg(
                     Arg::with_name("current")
                         .short("c")
                         .long("currently-running")
                         .value_name("COMMAND")
-                        .help("Name of the currently running command.")
+                        .help("Name of the currently running command")
                         .takes_value(true),
                 )
                 .arg(min_home_dir_uid_arg.clone())
