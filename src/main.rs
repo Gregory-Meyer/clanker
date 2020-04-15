@@ -75,6 +75,12 @@ fn main() {
                         .help("Cursor used when the current user is priviliged.")
                         .default_value("#"),
                 )
+                .arg(
+                    Arg::with_name("no_username_hostname")
+                        .short("S")
+                        .long("no-username-hostname")
+                        .help("If set, the current username and hostname will not be output."),
+                )
                 .arg(min_home_dir_uid_arg.clone())
                 .arg(working_directory_arg.clone()),
         )
@@ -123,25 +129,41 @@ fn main() {
             .unwrap();
         let compressed_working_directory = compressed_working_directory(matches, min_home_dir_uid);
 
-        let (username, is_root) = username_and_is_root();
-        let hostname = hostname();
-
-        if is_root {
-            print!(
-                "{}@{} {}{} ",
-                username,
-                hostname,
-                compressed_working_directory.red(),
-                priviliged_cursor
-            );
+        if matches.is_present("no_username_hostname") {
+            if is_root() {
+                print!(
+                    "{}{} ",
+                    compressed_working_directory.red(),
+                    priviliged_cursor
+                );
+            } else {
+                print!(
+                    "{}{} ",
+                    compressed_working_directory.green(),
+                    unpriviliged_cursor
+                );
+            }
         } else {
-            print!(
-                "{}@{} {}{} ",
-                username,
-                hostname,
-                compressed_working_directory.green(),
-                unpriviliged_cursor
-            );
+            let (username, is_root) = username_and_is_root();
+            let hostname = hostname();
+
+            if is_root {
+                print!(
+                    "{}@{} {}{} ",
+                    username,
+                    hostname,
+                    compressed_working_directory.red(),
+                    priviliged_cursor
+                );
+            } else {
+                print!(
+                    "{}@{} {}{} ",
+                    username,
+                    hostname,
+                    compressed_working_directory.green(),
+                    unpriviliged_cursor
+                );
+            }
         }
     } else if let Some(matches) = matches.subcommand_matches("right-prompt") {
         let return_code: i32 = matches.value_of("return_code").unwrap().parse().unwrap();
@@ -171,6 +193,10 @@ fn main() {
     } else {
         unreachable!();
     }
+}
+
+fn is_root() -> bool {
+    unsafe { libc::geteuid() == 0 }
 }
 
 fn username_and_is_root() -> (String, bool) {
