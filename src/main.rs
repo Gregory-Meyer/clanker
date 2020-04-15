@@ -38,7 +38,7 @@ fn main() {
             "Minimum UID for home directory prefix compression. A home directory prefix will \
                only be stripped if that user's UID is greater than or equal to this value.",
         )
-        .default_value("0")
+        .default_value("1000")
         .validator(|maybe_min_home_dir_uid| {
             if maybe_min_home_dir_uid.parse::<u64>().is_err() {
                 Err("expected an integer".to_string())
@@ -46,11 +46,29 @@ fn main() {
                 Ok(())
             }
         });
+
+    let max_home_dir_uid_arg = Arg::with_name("max_home_dir_uid")
+        .short("x")
+        .long("max-home-dir-uid")
+        .value_name("UID")
+        .help(
+            "Maximum UID for home directory prefix compression. A home directory prefix will \
+               only be stripped if that user's UID is less than or equal to this value.",
+        )
+        .default_value("60000")
+        .validator(|maybe_max_home_dir_uid| {
+            if maybe_max_home_dir_uid.parse::<u64>().is_err() {
+                Err("expected an integer".to_string())
+            } else {
+                Ok(())
+            }
+        });
+
     let working_directory_arg = Arg::with_name("working_directory")
         .short("w")
         .long("working-directory")
         .value_name("DIRECTORY")
-        .help("Path to use as the current working directory.")
+        .help("Path to use as the current working directory")
         .env("PWD");
 
     let matches = app_from_crate!()
@@ -58,35 +76,42 @@ fn main() {
         .setting(AppSettings::SubcommandRequired)
         .subcommand(
             SubCommand::with_name("prompt")
-                .about("Left side command prompt.")
+                .about("Left side command prompt")
                 .arg(
-                    Arg::with_name("unpriviliged_cursor")
+                    Arg::with_name("unprivileged_cursor")
                         .short("u")
-                        .long("unpriviliged-cursor")
+                        .long("unprivileged-cursor")
                         .value_name("CURSOR")
-                        .help("Cursor used when the current user is unpriviliged.")
+                        .help("Cursor used when the current user is unprivileged")
                         .default_value(">"),
                 )
                 .arg(
-                    Arg::with_name("priviliged_cursor")
+                    Arg::with_name("privileged_cursor")
                         .short("p")
-                        .long("priviliged-cursor")
+                        .long("privileged-cursor")
                         .value_name("CURSOR")
-                        .help("Cursor used when the current user is priviliged.")
+                        .help("Cursor used when the current user is privileged")
                         .default_value("#"),
                 )
+                .arg(
+                    Arg::with_name("no_username_hostname")
+                        .short("S")
+                        .long("no-username-hostname")
+                        .help("If set, the current username and hostname will not be output"),
+                )
                 .arg(min_home_dir_uid_arg.clone())
+                .arg(max_home_dir_uid_arg.clone())
                 .arg(working_directory_arg.clone()),
         )
         .subcommand(
             SubCommand::with_name("right-prompt")
-                .about("Right side command prompt.")
+                .about("Right side command prompt")
                 .arg(
                     Arg::with_name("return_code")
                         .short("r")
                         .long("return-code")
                         .value_name("CODE")
-                        .help("Return code from the last run command.")
+                        .help("Return code from the last run command")
                         .default_value("0")
                         .validator(|maybe_return_code| {
                             if maybe_return_code.parse::<i32>().is_err() {
@@ -99,49 +124,61 @@ fn main() {
         )
         .subcommand(
             SubCommand::with_name("title")
-                .about("Window title for terminal emulators.")
+                .about("Window title for terminal emulators")
                 .arg(
                     Arg::with_name("current")
                         .short("c")
                         .long("currently-running")
                         .value_name("COMMAND")
-                        .help("Name of the currently running command.")
+                        .help("Name of the currently running command")
                         .takes_value(true),
                 )
                 .arg(min_home_dir_uid_arg.clone())
+                .arg(max_home_dir_uid_arg.clone())
                 .arg(working_directory_arg.clone()),
         )
         .get_matches();
 
     if let Some(matches) = matches.subcommand_matches("prompt") {
-        let unpriviliged_cursor = matches.value_of("unpriviliged_cursor").unwrap();
-        let priviliged_cursor = matches.value_of("priviliged_cursor").unwrap();
-        let min_home_dir_uid = matches
-            .value_of("min_home_dir_uid")
-            .unwrap()
-            .parse()
-            .unwrap();
-        let compressed_working_directory = compressed_working_directory(matches, min_home_dir_uid);
+        let unprivileged_cursor = matches.value_of("unprivileged_cursor").unwrap();
+        let privileged_cursor = matches.value_of("privileged_cursor").unwrap();
+        let compressed_working_directory = compressed_working_directory(matches);
 
-        let (username, is_root) = username_and_is_root();
-        let hostname = hostname();
-
-        if is_root {
-            print!(
-                "{}@{} {}{} ",
-                username,
-                hostname,
-                compressed_working_directory.red(),
-                priviliged_cursor
-            );
+        if matches.is_present("no_username_hostname") {
+            if is_root() {
+                print!(
+                    "{}{} ",
+                    compressed_working_directory.red(),
+                    privileged_cursor
+                );
+            } else {
+                print!(
+                    "{}{} ",
+                    compressed_working_directory.green(),
+                    unprivileged_cursor
+                );
+            }
         } else {
-            print!(
-                "{}@{} {}{} ",
-                username,
-                hostname,
-                compressed_working_directory.green(),
-                unpriviliged_cursor
-            );
+            let (username, is_root) = username_and_is_root();
+            let hostname = hostname();
+
+            if is_root {
+                print!(
+                    "{}@{} {}{} ",
+                    username,
+                    hostname,
+                    compressed_working_directory.red(),
+                    privileged_cursor
+                );
+            } else {
+                print!(
+                    "{}@{} {}{} ",
+                    username,
+                    hostname,
+                    compressed_working_directory.green(),
+                    unprivileged_cursor
+                );
+            }
         }
     } else if let Some(matches) = matches.subcommand_matches("right-prompt") {
         let return_code: i32 = matches.value_of("return_code").unwrap().parse().unwrap();
@@ -156,12 +193,7 @@ fn main() {
             print!("{}", return_code.red());
         }
     } else if let Some(matches) = matches.subcommand_matches("title") {
-        let min_home_dir_uid = matches
-            .value_of("min_home_dir_uid")
-            .unwrap()
-            .parse()
-            .unwrap();
-        let compressed_working_directory = compressed_working_directory(matches, min_home_dir_uid);
+        let compressed_working_directory = compressed_working_directory(matches);
 
         if let Some(current) = matches.value_of("current") {
             print!("{} {}", current, compressed_working_directory)
@@ -171,6 +203,10 @@ fn main() {
     } else {
         unreachable!();
     }
+}
+
+fn is_root() -> bool {
+    unsafe { libc::geteuid() == 0 }
 }
 
 fn username_and_is_root() -> (String, bool) {
@@ -196,11 +232,22 @@ fn hostname() -> String {
     hostname.to_string_lossy().into_owned()
 }
 
-fn compressed_working_directory(matches: &ArgMatches, min_home_dir_uid: u64) -> String {
+fn compressed_working_directory(matches: &ArgMatches) -> String {
+    let min_home_dir_uid = matches
+        .value_of("min_home_dir_uid")
+        .unwrap()
+        .parse()
+        .unwrap();
+    let max_home_dir_uid = matches
+        .value_of("max_home_dir_uid")
+        .unwrap()
+        .parse()
+        .unwrap();
+
     if let Some(dir) = matches.value_of_os("working_directory") {
-        compress::compress(dir.as_ref(), min_home_dir_uid).ok()
+        compress::compress(dir.as_ref(), min_home_dir_uid, max_home_dir_uid).ok()
     } else if let Ok(dir) = env::current_dir() {
-        compress::compress(&dir, min_home_dir_uid).ok()
+        compress::compress(&dir, min_home_dir_uid, max_home_dir_uid).ok()
     } else {
         None
     }
