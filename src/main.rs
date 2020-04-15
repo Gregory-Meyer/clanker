@@ -38,7 +38,7 @@ fn main() {
             "Minimum UID for home directory prefix compression. A home directory prefix will \
                only be stripped if that user's UID is greater than or equal to this value.",
         )
-        .default_value("0")
+        .default_value("1000")
         .validator(|maybe_min_home_dir_uid| {
             if maybe_min_home_dir_uid.parse::<u64>().is_err() {
                 Err("expected an integer".to_string())
@@ -46,6 +46,24 @@ fn main() {
                 Ok(())
             }
         });
+
+    let max_home_dir_uid_arg = Arg::with_name("max_home_dir_uid")
+        .short("x")
+        .long("max-home-dir-uid")
+        .value_name("UID")
+        .help(
+            "Maximum UID for home directory prefix compression. A home directory prefix will \
+               only be stripped if that user's UID is less than or equal to this value.",
+        )
+        .default_value("60000")
+        .validator(|maybe_max_home_dir_uid| {
+            if maybe_max_home_dir_uid.parse::<u64>().is_err() {
+                Err("expected an integer".to_string())
+            } else {
+                Ok(())
+            }
+        });
+
     let working_directory_arg = Arg::with_name("working_directory")
         .short("w")
         .long("working-directory")
@@ -76,6 +94,7 @@ fn main() {
                         .default_value("#"),
                 )
                 .arg(min_home_dir_uid_arg.clone())
+                .arg(max_home_dir_uid_arg.clone())
                 .arg(working_directory_arg.clone()),
         )
         .subcommand(
@@ -109,6 +128,7 @@ fn main() {
                         .takes_value(true),
                 )
                 .arg(min_home_dir_uid_arg.clone())
+                .arg(max_home_dir_uid_arg.clone())
                 .arg(working_directory_arg.clone()),
         )
         .get_matches();
@@ -116,12 +136,7 @@ fn main() {
     if let Some(matches) = matches.subcommand_matches("prompt") {
         let unpriviliged_cursor = matches.value_of("unpriviliged_cursor").unwrap();
         let priviliged_cursor = matches.value_of("priviliged_cursor").unwrap();
-        let min_home_dir_uid = matches
-            .value_of("min_home_dir_uid")
-            .unwrap()
-            .parse()
-            .unwrap();
-        let compressed_working_directory = compressed_working_directory(matches, min_home_dir_uid);
+        let compressed_working_directory = compressed_working_directory(matches);
 
         let (username, is_root) = username_and_is_root();
         let hostname = hostname();
@@ -156,12 +171,7 @@ fn main() {
             print!("{}", return_code.red());
         }
     } else if let Some(matches) = matches.subcommand_matches("title") {
-        let min_home_dir_uid = matches
-            .value_of("min_home_dir_uid")
-            .unwrap()
-            .parse()
-            .unwrap();
-        let compressed_working_directory = compressed_working_directory(matches, min_home_dir_uid);
+        let compressed_working_directory = compressed_working_directory(matches);
 
         if let Some(current) = matches.value_of("current") {
             print!("{} {}", current, compressed_working_directory)
@@ -196,11 +206,22 @@ fn hostname() -> String {
     hostname.to_string_lossy().into_owned()
 }
 
-fn compressed_working_directory(matches: &ArgMatches, min_home_dir_uid: u64) -> String {
+fn compressed_working_directory(matches: &ArgMatches) -> String {
+    let min_home_dir_uid = matches
+        .value_of("min_home_dir_uid")
+        .unwrap()
+        .parse()
+        .unwrap();
+    let max_home_dir_uid = matches
+        .value_of("max_home_dir_uid")
+        .unwrap()
+        .parse()
+        .unwrap();
+
     if let Some(dir) = matches.value_of_os("working_directory") {
-        compress::compress(dir.as_ref(), min_home_dir_uid).ok()
+        compress::compress(dir.as_ref(), min_home_dir_uid, max_home_dir_uid).ok()
     } else if let Ok(dir) = env::current_dir() {
-        compress::compress(&dir, min_home_dir_uid).ok()
+        compress::compress(&dir, min_home_dir_uid, max_home_dir_uid).ok()
     } else {
         None
     }
