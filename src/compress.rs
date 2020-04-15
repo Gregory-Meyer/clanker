@@ -53,19 +53,7 @@ impl IntoStringLossy for PathBuf {
     }
 }
 
-pub fn cwd(min_home_dir_uid: u64) -> io::Result<String> {
-    current_dir().and_then(|d| compress(&d, min_home_dir_uid))
-}
-
-fn current_dir() -> io::Result<PathBuf> {
-    if let Some(path) = env::var_os("PWD") {
-        Ok(PathBuf::from(path))
-    } else {
-        env::current_dir()
-    }
-}
-
-fn compress(path: &Path, min_home_dir_uid: u64) -> io::Result<String> {
+pub fn compress(path: &Path, min_home_dir_uid: u64) -> io::Result<String> {
     let (without_prefix, mut buf, mut compressed) = without_prefix(path, min_home_dir_uid)?;
 
     let mut components: Vec<_> = without_prefix.components().collect();
