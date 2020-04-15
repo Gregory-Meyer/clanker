@@ -78,19 +78,19 @@ fn main() {
             SubCommand::with_name("prompt")
                 .about("Left side command prompt")
                 .arg(
-                    Arg::with_name("unpriviliged_cursor")
+                    Arg::with_name("unprivileged_cursor")
                         .short("u")
-                        .long("unpriviliged-cursor")
+                        .long("unprivileged-cursor")
                         .value_name("CURSOR")
-                        .help("Cursor used when the current user is unpriviliged")
+                        .help("Cursor used when the current user is unprivileged")
                         .default_value(">"),
                 )
                 .arg(
-                    Arg::with_name("priviliged_cursor")
+                    Arg::with_name("privileged_cursor")
                         .short("p")
-                        .long("priviliged-cursor")
+                        .long("privileged-cursor")
                         .value_name("CURSOR")
-                        .help("Cursor used when the current user is priviliged")
+                        .help("Cursor used when the current user is privileged")
                         .default_value("#"),
                 )
                 .arg(
@@ -140,8 +140,8 @@ fn main() {
         .get_matches();
 
     if let Some(matches) = matches.subcommand_matches("prompt") {
-        let unpriviliged_cursor = matches.value_of("unpriviliged_cursor").unwrap();
-        let priviliged_cursor = matches.value_of("priviliged_cursor").unwrap();
+        let unprivileged_cursor = matches.value_of("unprivileged_cursor").unwrap();
+        let privileged_cursor = matches.value_of("privileged_cursor").unwrap();
         let compressed_working_directory = compressed_working_directory(matches);
 
         if matches.is_present("no_username_hostname") {
@@ -149,13 +149,13 @@ fn main() {
                 print!(
                     "{}{} ",
                     compressed_working_directory.red(),
-                    priviliged_cursor
+                    privileged_cursor
                 );
             } else {
                 print!(
                     "{}{} ",
                     compressed_working_directory.green(),
-                    unpriviliged_cursor
+                    unprivileged_cursor
                 );
             }
         } else {
@@ -168,7 +168,7 @@ fn main() {
                     username,
                     hostname,
                     compressed_working_directory.red(),
-                    priviliged_cursor
+                    privileged_cursor
                 );
             } else {
                 print!(
@@ -176,7 +176,7 @@ fn main() {
                     username,
                     hostname,
                     compressed_working_directory.green(),
-                    unpriviliged_cursor
+                    unprivileged_cursor
                 );
             }
         }
